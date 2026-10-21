@@ -1,3 +1,4 @@
+
 import os
 import time
 from flask import Flask, request
@@ -6,7 +7,6 @@ import telebot
 TOKEN = "8782314424:AAHskWmE2RScH7PXVxiW9dLNRdrvitlKNto"
 bot = telebot.TeleBot(TOKEN)
 
-# Настройка веб-сервера для Render
 app = Flask(__name__)
 WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://eywa-chta-bot.onrender.com")
 
@@ -30,6 +30,20 @@ def check_command(text):
         
     return None, ""
 
+# Обработчик Webhook от Telegram
+@app.route("/" + TOKEN, methods=["POST"])
+def getMessage():
+    json_string = request.get_data().decode("utf-8")
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "!", 200
+
+@app.route("/")
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL + "/" + TOKEN)
+    return "Webhook set!", 200
+
 @bot.message_handler(func=lambda message: True)
 def handle_direct_commands(message):
     global mute_enabled
@@ -49,7 +63,6 @@ def handle_direct_commands(message):
             except Exception:
                 break
 
-    # Удаление сообщений в обычных чатах, если включен мут
     if mute_enabled and not message.from_user.is_bot:
         try:
             bot.delete_message(message.chat.id, message.message_id)
@@ -72,6 +85,9 @@ def handle_business_message(message):
         except Exception:
             pass
         return
+
 if __name__ == "__main__":
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL + "/" + TOKEN)
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
     
