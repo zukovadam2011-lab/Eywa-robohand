@@ -99,11 +99,6 @@ def try_delete(chat_id, message_id, business_connection_id=None):
             bot.delete_message(chat_id, message_id)
     except Exception as e:
         logging.warning("delete failed: %s", e)
-        if business_connection_id:
-            try:
-                bot.send_message(chat_id, f"⚠️ Ошибка удаления: {e}", business_connection_id=business_connection_id)
-            except:
-                pass
 
 # --- БЛОК: КОМАНДА /start И МЕНЮ ---
 
@@ -139,7 +134,7 @@ def callback_show_help(call):
         "<i>(Это бесплатная функция, платный Telegram Premium/Business не нужен!)</i>\n\n"
         
         "<b>🛡 Управление антиспамом:</b>\n"
-        "🔹 <code>.мут</code> / <code>/mute</code> — Включает антиспам (бот начнёт удалять все сообщения).\n"
+        "🔹 <code>.мут</code> / <code>/mute</code> — Включает антиспам (бот начнёт удалять все сообщения, включая команды спама).\n"
         "🔹 <code>.размут</code> / <code>.анмут</code> — Выключает антиспам.\n\n"
         
         "<b>💥 Спам-атака (для приколов):</b>\n"
@@ -175,19 +170,26 @@ def handle_message(message):
         return
     if not message.from_user or message.from_user.is_bot:
         return
-
     if message.text and message.text.startswith('/start'):
         return
 
     action, arg = parse_command(message.text)
     is_private = message.chat.type == "private"
     chat_key = message.chat.id
+    is_muted = chat_key in muted_chats
+
+    # БЛОКИРОВКА: Если чат в муте, удаляем всё, кроме команд размута/стопа
+    if is_muted:
+        if action not in ("mute_off", "stop_spam"):
+            try_delete(chat_key, message.message_id)
+            return
 
     if action == "mute_on":
         if not is_private and not is_group_admin(message):
             bot.reply_to(message, "Только админ может включать антиспам")
             return
         muted_chats.add(chat_key)
+        if chat_key in active_spam: active_spam[chat_key].set() # Останавливаем спам
         bot.reply_to(message, "Антиспам включён ✅")
         return
 
@@ -210,6 +212,9 @@ def handle_message(message):
     if action == "text_spam" and arg:
         if not is_private and not is_group_admin(message):
             return
+        if not arg.strip(". "): # Защита от пустого спама (точки/пробелы)
+            bot.reply_to(message, "Нельзя спамить пустотой или точками.")
+            return
         spam_send(lambda: bot.send_message(chat_key, arg), chat_key=chat_key)
         return
 
@@ -223,11 +228,8 @@ def handle_message(message):
         spam_send(lambda: bot.send_sticker(chat_key, sid), chat_key=chat_key)
         return
 
-    if chat_key in muted_chats:
-        try_delete(chat_key, message.message_id)
 
-
-# БИЗНЕС ОБРАБОТЧИК (теперь работает и для Автоматизации чатов)
+# БИЗНЕС ОБРАБОТЧИК (Автоматизация чатов)
 @bot.business_message_handler(
     func=lambda m: getattr(m, "business_connection_id", None) is not None,
     content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"],
@@ -240,6 +242,7 @@ def handle_business(message):
     bc = message.business_connection_id
     chat_id = message.chat.id
     mute_key = (bc, chat_id)
+    is_muted = mute_key in muted_business
 
     def send(text):
         try:
@@ -247,11 +250,18 @@ def handle_business(message):
         except Exception as e:
             logging.warning("business send failed: %s", e)
 
+    # БЛОКИРОВКА: Если чат в муте, удаляем всё, кроме команд размута/стопа
+    if is_muted:
+        if action not in ("mute_off", "stop_spam"):
+            try_delete(chat_id, message.message_id, business_connection_id=bc)
+            return
+
     if action == "mute_on":
         if not is_business_owner(message):
             send("Только владелец аккаунта может включать антиспам")
             return
         muted_business.add(mute_key)
+        if mute_key in active_spam: active_spam[mute_key].set() # Останавливаем спам
         send("Антиспам включён ✅")
         return
 
@@ -274,6 +284,9 @@ def handle_business(message):
     if action == "text_spam" and arg:
         if not is_business_owner(message):
             return
+        if not arg.strip(". "): # Защита от пустого спама
+            send("Нельзя спамить пустотой или точками.")
+            return
         spam_send(lambda: bot.send_message(
             chat_id=chat_id, text=arg, business_connection_id=bc), chat_key=mute_key)
         return
@@ -288,9 +301,6 @@ def handle_business(message):
         spam_send(lambda: bot.send_sticker(
             chat_id=chat_id, sticker=sid, business_connection_id=bc), chat_key=mute_key)
         return
-
-    if mute_key in muted_business:
-        try_delete(chat_id, message.message_id, business_connection_id=bc)
 
 
 @app.route(f"/{TOKEN}", methods=["POST"])
