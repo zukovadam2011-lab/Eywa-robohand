@@ -13,9 +13,10 @@ WEBHOOK_URL = os.environ["RENDER_EXTERNAL_URL"].rstrip("/")
 bot = telebot.TeleBot(TOKEN, parse_mode=None)
 app = Flask(__name__)
 
-# Теперь мут хранится отдельно для каждого чата и подключения
 muted_chats = set() 
-muted_business = set() # Хранит кортежи (business_connection_id, chat_id)
+muted_business = set()
+# Словарь для хранения активных процессов спама (чтобы можно было их остановить)
+active_spam = {}
 
 def parse_command(text):
     if not text:
@@ -31,6 +32,8 @@ def parse_command(text):
             return "mute_on", ""
         if cmd in ("/unmute", "/размут", "/анмут"):
             return "mute_off", ""
+        if cmd in ("/stop", "/стоп"):
+            return "stop_spam", ""
         if cmd == "/st":
             return "sticker_spam", ""
         if cmd == "/s" and len(t.split(" ", 1)) == 2:
@@ -41,6 +44,8 @@ def parse_command(text):
         return "mute_on", ""
     if low in (".размут", ".анмут"):
         return "mute_off", ""
+    if low == ".стоп":
+        return "stop_spam", ""
     if low == ".ст":
         return "sticker_spam", ""
     if low.startswith(".с "):
@@ -56,7 +61,6 @@ def is_group_admin(message):
         return False
 
 def is_business_owner(message):
-    # Проверяем, что команду пишет владелец аккаунта, а не его собеседник
     try:
         conn = bot.get_business_connection(message.business_connection_id)
         return conn.user.id == message.from_user.id
@@ -64,15 +68,30 @@ def is_business_owner(message):
         logging.warning("get_business_connection failed: %s", e)
         return False
 
-def spam_send(fn, times=50, delay=0.5):
+# Обновленная функция спама с поддержкой моментальной остановки
+def spam_send(fn, chat_key, times=100, delay=0.5):
+    stop_event = threading.Event()
+    active_spam[chat_key] = stop_event
+    
     def runner():
         for _ in range(times):
+            # Если пришла команда стоп, прерываем цикл
+            if stop_event.is_set():
+                logging.info(f"Спам остановлен вручную в чате {chat_key}")
+                break
             try:
                 fn()
-                time.sleep(delay)
+                # Ждем delay секунд ИЛИ пока не придет команда стоп
+                if stop_event.wait(delay):
+                    logging.info(f"Спам прерван во время паузы в чате {chat_key}")
+                    break
             except Exception as e:
-                logging.warning("spam stopped: %s", e)
-                return
+                logging.warning("spam stopped by error: %s", e)
+                break
+        # Убираем из памяти после завершения
+        if chat_key in active_spam:
+            del active_spam[chat_key]
+            
     threading.Thread(target=runner, daemon=True).start()
 
 def try_delete(chat_id, message_id, business_connection_id=None):
@@ -88,27 +107,26 @@ def try_delete(chat_id, message_id, business_connection_id=None):
     except Exception as e:
         logging.warning("delete failed chat=%s msg=%s: %s", chat_id, message_id, e)
 
-# ОБЫЧНЫЙ ОБРАБОТЧИК (для групп и личек с ботом)
+# ОБЫЧНЫЙ ОБРАБОТЧИК
 @bot.message_handler(
-    func=lambda m: getattr(m, "business_connection_id", None) is None, # Жесткий фильтр от бизнес-сообщений
+    func=lambda m: getattr(m, "business_connection_id", None) is None,
     content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"],
 )
 def handle_message(message):
-    # Дополнительная страховка
     if getattr(message, "business_connection_id", None) is not None:
         return
-
     if not message.from_user or message.from_user.is_bot:
         return
 
     action, arg = parse_command(message.text)
     is_private = message.chat.type == "private"
+    chat_key = message.chat.id
 
     if action == "mute_on":
         if not is_private and not is_group_admin(message):
             bot.reply_to(message, "Только админ может включать антиспам")
             return
-        muted_chats.add(message.chat.id)
+        muted_chats.add(chat_key)
         bot.reply_to(message, "Антиспам включён ✅")
         return
 
@@ -116,15 +134,22 @@ def handle_message(message):
         if not is_private and not is_group_admin(message):
             bot.reply_to(message, "Только админ может выключать антиспам")
             return
-        muted_chats.discard(message.chat.id)
+        muted_chats.discard(chat_key)
         bot.reply_to(message, "Антиспам выключен")
+        return
+        
+    if action == "stop_spam":
+        if chat_key in active_spam:
+            active_spam[chat_key].set() # Подаем сигнал на остановку
+            bot.reply_to(message, "Спам остановлен 🛑")
+        else:
+            bot.reply_to(message, "Спам и так не запущен")
         return
 
     if action == "text_spam" and arg:
         if not is_private and not is_group_admin(message):
             return
-        chat_id = message.chat.id
-        spam_send(lambda: bot.send_message(chat_id, arg))
+        spam_send(lambda: bot.send_message(chat_key, arg), chat_key=chat_key)
         return
 
     if action == "sticker_spam":
@@ -133,16 +158,15 @@ def handle_message(message):
         if not (message.reply_to_message and message.reply_to_message.sticker):
             bot.reply_to(message, "Ответь этой командой на стикер")
             return
-        chat_id = message.chat.id
         sid = message.reply_to_message.sticker.file_id
-        spam_send(lambda: bot.send_sticker(chat_id, sid))
+        spam_send(lambda: bot.send_sticker(chat_key, sid), chat_key=chat_key)
         return
 
-    if message.chat.id in muted_chats:
-        try_delete(message.chat.id, message.message_id)
+    if chat_key in muted_chats:
+        try_delete(chat_key, message.message_id)
 
 
-# БИЗНЕС ОБРАБОТЧИК (для Telegram Business)
+# БИЗНЕС ОБРАБОТЧИК
 @bot.business_message_handler(
     func=lambda m: getattr(m, "business_connection_id", None) is not None,
     content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"],
@@ -154,9 +178,7 @@ def handle_business(message):
     action, arg = parse_command(message.text)
     bc = message.business_connection_id
     chat_id = message.chat.id
-    
-    # Уникальный ключ для этого конкретного диалога
-    mute_key = (bc, chat_id)
+    mute_key = (bc, chat_id) # Уникальный ключ для бизнес-чата
 
     def send(text):
         try:
@@ -165,7 +187,6 @@ def handle_business(message):
             logging.warning("business send failed: %s", e)
 
     if action == "mute_on":
-        # Запрещаем собеседнику управлять ботом
         if not is_business_owner(message):
             send("Только владелец аккаунта может включать антиспам")
             return
@@ -181,11 +202,19 @@ def handle_business(message):
         send("Антиспам выключен")
         return
 
+    if action == "stop_spam":
+        if mute_key in active_spam:
+            active_spam[mute_key].set() # Останавливаем
+            send("Спам остановлен 🛑")
+        else:
+            send("Спам и так не запущен")
+        return
+
     if action == "text_spam" and arg:
         if not is_business_owner(message):
             return
         spam_send(lambda: bot.send_message(
-            chat_id=chat_id, text=arg, business_connection_id=bc))
+            chat_id=chat_id, text=arg, business_connection_id=bc), chat_key=mute_key)
         return
 
     if action == "sticker_spam":
@@ -196,10 +225,9 @@ def handle_business(message):
             return
         sid = message.reply_to_message.sticker.file_id
         spam_send(lambda: bot.send_sticker(
-            chat_id=chat_id, sticker=sid, business_connection_id=bc))
+            chat_id=chat_id, sticker=sid, business_connection_id=bc), chat_key=mute_key)
         return
 
-    # Если мут включен именно для этого собеседника
     if mute_key in muted_business:
         try_delete(chat_id, message.message_id, business_connection_id=bc)
 
