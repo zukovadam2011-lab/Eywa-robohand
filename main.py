@@ -4,6 +4,7 @@ import logging
 import threading
 from flask import Flask, request
 import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -90,7 +91,6 @@ def spam_send(fn, chat_key, times=100, delay=0.5):
 def try_delete(chat_id, message_id, business_connection_id=None):
     try:
         if business_connection_id:
-            # ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ МЕТОД ДЛЯ БИЗНЕС-ЧАТОВ
             bot.delete_business_messages(
                 business_connection_id=business_connection_id,
                 message_ids=[message_id]
@@ -105,6 +105,54 @@ def try_delete(chat_id, message_id, business_connection_id=None):
             except:
                 pass
 
+# --- НОВЫЙ БЛОК: КОМАНДА /start И МЕНЮ ---
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    # Работает только в личных сообщениях с ботом, чтобы не спамить в группах
+    if message.chat.type == 'private':
+        markup = InlineKeyboardMarkup()
+        btn_help = InlineKeyboardButton("📖 Просмотр команд и правил", callback_data="show_help")
+        markup.add(btn_help)
+        bot.send_message(
+            message.chat.id, 
+            "Привет! Я бот Еува. 👋\n\nНажми на кнопку ниже, чтобы узнать, что я умею.", 
+            reply_markup=markup
+        )
+    else:
+        bot.reply_to(message, "Привет! Я бот Еува. Напиши мне в личку /start, чтобы увидеть меню.")
+
+@bot.callback_query_handler(func=lambda call: call.data == "show_help")
+def callback_show_help(call):
+    help_text = (
+        "<b>📋 Список команд Еува</b>\n\n"
+        "<b>🛡 Управление антиспамом:</b>\n"
+        "🔹 <code>.мут</code> / <code>/mute</code> — Включает антиспам (удаляет все сообщения).\n"
+        "🔹 <code>.размут</code> / <code>.анмут</code> — Выключает антиспам.\n\n"
+        "<b>💥 Спам-атака (для приколов):</b>\n"
+        "🔹 <code>.с [текст]</code> — Отправить текст 100 раз.\n"
+        "🔹 <code>.ст</code> — Отправить 100 раз стикер (нужно ответить на стикер этой командой).\n"
+        "🔹 <code>.стоп</code> / <code>/stop</code> — Мгновенно остановить рассылку.\n\n"
+        "<b>💼 Для Telegram Business (автоответчик):</b>\n"
+        "Все эти команды работают и в бизнес-чатах. Бот сам поймет, что это бизнес-аккаунт, и будет удалять сообщения там.\n"
+        "⚠️ <i>В бизнес-чатах включать и выключать антиспам может только владелец аккаунта, а не собеседник.</i>\n\n"
+        "<b>⚠️ Правила безопасности:</b>\n"
+        "1. Не запускайте спам на слишком долгое время, Telegram может заблокировать бота за флуд.\n"
+        "2. В группах бот должен быть администратором с правом «Удаление сообщений», иначе антиспам не сработает."
+    )
+    
+    # Меняем сообщение с приветствием на текст помощи и убираем кнопку
+    bot.edit_message_text(
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=help_text,
+        parse_mode='HTML',
+        reply_markup=None 
+    )
+    bot.answer_callback_query(call.id)
+
+# ------------------------------------------
+
 # ОБЫЧНЫЙ ОБРАБОТЧИК
 @bot.message_handler(
     func=lambda m: getattr(m, "business_connection_id", None) is None,
@@ -114,6 +162,10 @@ def handle_message(message):
     if getattr(message, "business_connection_id", None) is not None:
         return
     if not message.from_user or message.from_user.is_bot:
+        return
+
+    # Пропускаем команду /start, чтобы она не обрабатывалась как обычный текст
+    if message.text and message.text.startswith('/start'):
         return
 
     action, arg = parse_command(message.text)
@@ -184,7 +236,6 @@ def handle_business(message):
         except Exception as e:
             logging.warning("business send failed: %s", e)
 
-    # ВОЗВРАЩАЕМ ПРОВЕРКУ ВЛАДЕЛЬЦА
     if action == "mute_on":
         if not is_business_owner(message):
             send("Только владелец аккаунта может включать антиспам")
