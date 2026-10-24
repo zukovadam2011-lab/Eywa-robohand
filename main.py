@@ -15,7 +15,6 @@ app = Flask(__name__)
 
 muted_chats = set() 
 muted_business = set()
-# Словарь для хранения активных процессов спама (чтобы можно было их остановить)
 active_spam = {}
 
 def parse_command(text):
@@ -60,35 +59,21 @@ def is_group_admin(message):
         logging.warning("get_chat_member failed: %s", e)
         return False
 
-def is_business_owner(message):
-    try:
-        conn = bot.get_business_connection(message.business_connection_id)
-        return conn.user.id == message.from_user.id
-    except Exception as e:
-        logging.warning("get_business_connection failed: %s", e)
-        return False
-
-# Обновленная функция спама с поддержкой моментальной остановки
 def spam_send(fn, chat_key, times=100, delay=0.5):
     stop_event = threading.Event()
     active_spam[chat_key] = stop_event
     
     def runner():
         for _ in range(times):
-            # Если пришла команда стоп, прерываем цикл
             if stop_event.is_set():
-                logging.info(f"Спам остановлен вручную в чате {chat_key}")
                 break
             try:
                 fn()
-                # Ждем delay секунд ИЛИ пока не придет команда стоп
                 if stop_event.wait(delay):
-                    logging.info(f"Спам прерван во время паузы в чате {chat_key}")
                     break
             except Exception as e:
                 logging.warning("spam stopped by error: %s", e)
                 break
-        # Убираем из памяти после завершения
         if chat_key in active_spam:
             del active_spam[chat_key]
             
@@ -105,7 +90,13 @@ def try_delete(chat_id, message_id, business_connection_id=None):
         else:
             bot.delete_message(chat_id, message_id)
     except Exception as e:
-        logging.warning("delete failed chat=%s msg=%s: %s", chat_id, message_id, e)
+        logging.warning("delete failed: %s", e)
+        # Если удалить не удалось — пишем ошибку в бизнес-чат, чтобы ты видел причину
+        if business_connection_id:
+            try:
+                bot.send_message(chat_id, f"⚠️ Ошибка удаления: {e}", business_connection_id=business_connection_id)
+            except:
+                pass
 
 # ОБЫЧНЫЙ ОБРАБОТЧИК
 @bot.message_handler(
@@ -140,7 +131,7 @@ def handle_message(message):
         
     if action == "stop_spam":
         if chat_key in active_spam:
-            active_spam[chat_key].set() # Подаем сигнал на остановку
+            active_spam[chat_key].set()
             bot.reply_to(message, "Спам остановлен 🛑")
         else:
             bot.reply_to(message, "Спам и так не запущен")
@@ -178,7 +169,7 @@ def handle_business(message):
     action, arg = parse_command(message.text)
     bc = message.business_connection_id
     chat_id = message.chat.id
-    mute_key = (bc, chat_id) # Уникальный ключ для бизнес-чата
+    mute_key = (bc, chat_id)
 
     def send(text):
         try:
@@ -186,40 +177,31 @@ def handle_business(message):
         except Exception as e:
             logging.warning("business send failed: %s", e)
 
+    # Убрал проверку is_business_owner, чтобы не было двойных срабатываний
     if action == "mute_on":
-        if not is_business_owner(message):
-            send("Только владелец аккаунта может включать антиспам")
-            return
         muted_business.add(mute_key)
         send("Антиспам включён ✅")
         return
 
     if action == "mute_off":
-        if not is_business_owner(message):
-            send("Только владелец аккаунта может выключать антиспам")
-            return
         muted_business.discard(mute_key)
         send("Антиспам выключен")
         return
 
     if action == "stop_spam":
         if mute_key in active_spam:
-            active_spam[mute_key].set() # Останавливаем
+            active_spam[mute_key].set()
             send("Спам остановлен 🛑")
         else:
             send("Спам и так не запущен")
         return
 
     if action == "text_spam" and arg:
-        if not is_business_owner(message):
-            return
         spam_send(lambda: bot.send_message(
             chat_id=chat_id, text=arg, business_connection_id=bc), chat_key=mute_key)
         return
 
     if action == "sticker_spam":
-        if not is_business_owner(message):
-            return
         if not (message.reply_to_message and message.reply_to_message.sticker):
             send("Ответь этой командой на стикер")
             return
