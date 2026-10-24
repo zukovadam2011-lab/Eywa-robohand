@@ -111,11 +111,14 @@ def try_delete(chat_id, message_id, business_connection_id=None):
 def send_welcome(message):
     if message.chat.type == 'private':
         markup = InlineKeyboardMarkup()
-        btn_help = InlineKeyboardButton("📖 Просмотр команд и правил", callback_data="show_help")
+        btn_help = InlineKeyboardButton("📖 Открыть меню и правила", callback_data="show_help")
         markup.add(btn_help)
         bot.send_message(
             message.chat.id, 
-            "Привет! Я бот Еува. 👋\n\nНажми на кнопку ниже, чтобы узнать, что я умею.", 
+            "Привет! Я бот <b>Еува</b>. 👋\n\n"
+            "Я умею защищать чаты от спама, флудить стикерами и работать как твой личный ассистент.\n\n"
+            "Нажми на кнопку ниже, чтобы узнать, как меня подключить и какие у меня есть команды.", 
+            parse_mode='HTML',
             reply_markup=markup
         )
     else:
@@ -123,27 +126,32 @@ def send_welcome(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_help")
 def callback_show_help(call):
-    # 1. СРАЗУ отвечаем Telegram, чтобы убрать "часики" с кнопки
     bot.answer_callback_query(call.id)
     
     help_text = (
-        "<b>📋 Список команд Еува</b>\n\n"
+        "<b>🌟 ЕУВА — ТВОЙ АССИСТЕНТ</b> 🌟\n\n"
+        
+        "<b>⚙️ Как подключить (бесплатно):</b>\n"
+        "1. Открой <b>Настройки</b> Telegram.\n"
+        "2. Перейди в раздел <b>Аккаунт</b> (или Конфиденциальность).\n"
+        "3. Найди пункт <b>«Автоматизация чатов»</b>.\n"
+        "4. Подключи бота <b>Еува</b> к своему аккаунту.\n"
+        "<i>(Это бесплатная функция, платный Telegram Premium/Business не нужен!)</i>\n\n"
+        
         "<b>🛡 Управление антиспамом:</b>\n"
-        "🔹 <code>.мут</code> / <code>/mute</code> — Включает антиспам.\n"
+        "🔹 <code>.мут</code> / <code>/mute</code> — Включает антиспам (бот начнёт удалять все сообщения).\n"
         "🔹 <code>.размут</code> / <code>.анмут</code> — Выключает антиспам.\n\n"
+        
         "<b>💥 Спам-атака (для приколов):</b>\n"
-        "🔹 <code>.с [текст]</code> — Отправить текст 100 раз.\n"
-        "🔹 <code>.ст</code> — Отправить 100 раз стикер (в ответ на стикер).\n"
+        "🔹 <code>.с [текст]</code> — Отправить твой текст 100 раз.\n"
+        "🔹 <code>.ст</code> — Отправить 100 раз стикер (нужно ответить на любой стикер этой командой).\n"
         "🔹 <code>.стоп</code> / <code>/stop</code> — Мгновенно остановить рассылку.\n\n"
-        "<b>💼 Для Telegram Business (автоответчик):</b>\n"
-        "Все эти команды работают и в бизнес-чатах. Бот сам поймет, что это бизнес-аккаунт.\n"
-        "⚠️ <i>В бизнес-чатах включать/выключать антиспам может только владелец аккаунта.</i>\n\n"
-        "<b>⚠️ Правила безопасности:</b>\n"
-        "1. Не запускайте спам надолго, Telegram может заблокировать бота за флуд.\n"
-        "2. В группах бот должен быть админом с правом «Удаление сообщений»."
+        
+        "<b>📜 Правила и безопасность:</b>\n"
+        "<blockquote>1. Не спамьте слишком долго, Telegram может выдать бан вашему аккаунту или боту.\n"
+        "2. Если используете бота в группе — сделайте его администратором с правом «Удаление сообщений».</blockquote>"
     )
     
-    # 2. Меняем сообщение (в try/except на случай, если текст не изменился)
     try:
         bot.edit_message_text(
             chat_id=call.message.chat.id,
@@ -219,7 +227,7 @@ def handle_message(message):
         try_delete(chat_key, message.message_id)
 
 
-# БИЗНЕС ОБРАБОТЧИК
+# БИЗНЕС ОБРАБОТЧИК (теперь работает и для Автоматизации чатов)
 @bot.business_message_handler(
     func=lambda m: getattr(m, "business_connection_id", None) is not None,
     content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"],
@@ -303,7 +311,7 @@ if __name__ == "__main__":
         allowed_updates=[
             "message",
             "edited_message",
-            "callback_query",  # <--- ДОБАВЛЕНО: теперь бот видит нажатия на кнопки
+            "callback_query",
             "business_connection",
             "business_message",
             "edited_business_message",
