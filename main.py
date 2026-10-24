@@ -59,6 +59,14 @@ def is_group_admin(message):
         logging.warning("get_chat_member failed: %s", e)
         return False
 
+def is_business_owner(message):
+    try:
+        conn = bot.get_business_connection(message.business_connection_id)
+        return conn.user.id == message.from_user.id
+    except Exception as e:
+        logging.warning("get_business_connection failed: %s", e)
+        return False
+
 def spam_send(fn, chat_key, times=100, delay=0.5):
     stop_event = threading.Event()
     active_spam[chat_key] = stop_event
@@ -82,16 +90,15 @@ def spam_send(fn, chat_key, times=100, delay=0.5):
 def try_delete(chat_id, message_id, business_connection_id=None):
     try:
         if business_connection_id:
-            bot.delete_message(
-                chat_id=chat_id,
-                message_id=message_id,
+            # ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ МЕТОД ДЛЯ БИЗНЕС-ЧАТОВ
+            bot.delete_business_messages(
                 business_connection_id=business_connection_id,
+                message_ids=[message_id]
             )
         else:
             bot.delete_message(chat_id, message_id)
     except Exception as e:
         logging.warning("delete failed: %s", e)
-        # Если удалить не удалось — пишем ошибку в бизнес-чат, чтобы ты видел причину
         if business_connection_id:
             try:
                 bot.send_message(chat_id, f"⚠️ Ошибка удаления: {e}", business_connection_id=business_connection_id)
@@ -177,13 +184,19 @@ def handle_business(message):
         except Exception as e:
             logging.warning("business send failed: %s", e)
 
-    # Убрал проверку is_business_owner, чтобы не было двойных срабатываний
+    # ВОЗВРАЩАЕМ ПРОВЕРКУ ВЛАДЕЛЬЦА
     if action == "mute_on":
+        if not is_business_owner(message):
+            send("Только владелец аккаунта может включать антиспам")
+            return
         muted_business.add(mute_key)
         send("Антиспам включён ✅")
         return
 
     if action == "mute_off":
+        if not is_business_owner(message):
+            send("Только владелец аккаунта может выключать антиспам")
+            return
         muted_business.discard(mute_key)
         send("Антиспам выключен")
         return
@@ -197,11 +210,15 @@ def handle_business(message):
         return
 
     if action == "text_spam" and arg:
+        if not is_business_owner(message):
+            return
         spam_send(lambda: bot.send_message(
             chat_id=chat_id, text=arg, business_connection_id=bc), chat_key=mute_key)
         return
 
     if action == "sticker_spam":
+        if not is_business_owner(message):
+            return
         if not (message.reply_to_message and message.reply_to_message.sticker):
             send("Ответь этой командой на стикер")
             return
