@@ -105,11 +105,10 @@ def try_delete(chat_id, message_id, business_connection_id=None):
             except:
                 pass
 
-# --- НОВЫЙ БЛОК: КОМАНДА /start И МЕНЮ ---
+# --- БЛОК: КОМАНДА /start И МЕНЮ ---
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    # Работает только в личных сообщениях с ботом, чтобы не спамить в группах
     if message.chat.type == 'private':
         markup = InlineKeyboardMarkup()
         btn_help = InlineKeyboardButton("📖 Просмотр команд и правил", callback_data="show_help")
@@ -124,32 +123,37 @@ def send_welcome(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_help")
 def callback_show_help(call):
+    # 1. СРАЗУ отвечаем Telegram, чтобы убрать "часики" с кнопки
+    bot.answer_callback_query(call.id)
+    
     help_text = (
         "<b>📋 Список команд Еува</b>\n\n"
         "<b>🛡 Управление антиспамом:</b>\n"
-        "🔹 <code>.мут</code> / <code>/mute</code> — Включает антиспам (удаляет все сообщения).\n"
+        "🔹 <code>.мут</code> / <code>/mute</code> — Включает антиспам.\n"
         "🔹 <code>.размут</code> / <code>.анмут</code> — Выключает антиспам.\n\n"
         "<b>💥 Спам-атака (для приколов):</b>\n"
         "🔹 <code>.с [текст]</code> — Отправить текст 100 раз.\n"
-        "🔹 <code>.ст</code> — Отправить 100 раз стикер (нужно ответить на стикер этой командой).\n"
+        "🔹 <code>.ст</code> — Отправить 100 раз стикер (в ответ на стикер).\n"
         "🔹 <code>.стоп</code> / <code>/stop</code> — Мгновенно остановить рассылку.\n\n"
         "<b>💼 Для Telegram Business (автоответчик):</b>\n"
-        "Все эти команды работают и в бизнес-чатах. Бот сам поймет, что это бизнес-аккаунт, и будет удалять сообщения там.\n"
-        "⚠️ <i>В бизнес-чатах включать и выключать антиспам может только владелец аккаунта, а не собеседник.</i>\n\n"
+        "Все эти команды работают и в бизнес-чатах. Бот сам поймет, что это бизнес-аккаунт.\n"
+        "⚠️ <i>В бизнес-чатах включать/выключать антиспам может только владелец аккаунта.</i>\n\n"
         "<b>⚠️ Правила безопасности:</b>\n"
-        "1. Не запускайте спам на слишком долгое время, Telegram может заблокировать бота за флуд.\n"
-        "2. В группах бот должен быть администратором с правом «Удаление сообщений», иначе антиспам не сработает."
+        "1. Не запускайте спам надолго, Telegram может заблокировать бота за флуд.\n"
+        "2. В группах бот должен быть админом с правом «Удаление сообщений»."
     )
     
-    # Меняем сообщение с приветствием на текст помощи и убираем кнопку
-    bot.edit_message_text(
-        chat_id=call.message.chat.id,
-        message_id=call.message.message_id,
-        text=help_text,
-        parse_mode='HTML',
-        reply_markup=None 
-    )
-    bot.answer_callback_query(call.id)
+    # 2. Меняем сообщение (в try/except на случай, если текст не изменился)
+    try:
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=help_text,
+            parse_mode='HTML',
+            reply_markup=None 
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при редактировании сообщения: {e}")
 
 # ------------------------------------------
 
@@ -164,7 +168,6 @@ def handle_message(message):
     if not message.from_user or message.from_user.is_bot:
         return
 
-    # Пропускаем команду /start, чтобы она не обрабатывалась как обычный текст
     if message.text and message.text.startswith('/start'):
         return
 
@@ -300,6 +303,7 @@ if __name__ == "__main__":
         allowed_updates=[
             "message",
             "edited_message",
+            "callback_query",  # <--- ДОБАВЛЕНО: теперь бот видит нажатия на кнопки
             "business_connection",
             "business_message",
             "edited_business_message",
