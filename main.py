@@ -13,8 +13,9 @@ WEBHOOK_URL = os.environ["RENDER_EXTERNAL_URL"].rstrip("/")
 bot = telebot.TeleBot(TOKEN, parse_mode=None)
 app = Flask(__name__)
 
-muted_chats = set()
-muted_business = set()
+# Теперь мут хранится отдельно для каждого чата и подключения
+muted_chats = set() 
+muted_business = set() # Хранит кортежи (business_connection_id, chat_id)
 
 def parse_command(text):
     if not text:
@@ -54,6 +55,15 @@ def is_group_admin(message):
         logging.warning("get_chat_member failed: %s", e)
         return False
 
+def is_business_owner(message):
+    # Проверяем, что команду пишет владелец аккаунта, а не его собеседник
+    try:
+        conn = bot.get_business_connection(message.business_connection_id)
+        return conn.user.id == message.from_user.id
+    except Exception as e:
+        logging.warning("get_business_connection failed: %s", e)
+        return False
+
 def spam_send(fn, times=50, delay=0.5):
     def runner():
         for _ in range(times):
@@ -76,15 +86,18 @@ def try_delete(chat_id, message_id, business_connection_id=None):
         else:
             bot.delete_message(chat_id, message_id)
     except Exception as e:
-        # Если не удаляется, в логах Render будет видно почему
         logging.warning("delete failed chat=%s msg=%s: %s", chat_id, message_id, e)
 
-# ВАЖНО: Добавлен фильтр, чтобы обычный обработчик не трогал бизнес-сообщения
+# ОБЫЧНЫЙ ОБРАБОТЧИК (для групп и личек с ботом)
 @bot.message_handler(
-    func=lambda m: not getattr(m, "business_connection_id", None),
+    func=lambda m: getattr(m, "business_connection_id", None) is None, # Жесткий фильтр от бизнес-сообщений
     content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"],
 )
 def handle_message(message):
+    # Дополнительная страховка
+    if getattr(message, "business_connection_id", None) is not None:
+        return
+
     if not message.from_user or message.from_user.is_bot:
         return
 
@@ -128,7 +141,8 @@ def handle_message(message):
     if message.chat.id in muted_chats:
         try_delete(message.chat.id, message.message_id)
 
-# Обработчик для бизнес-аккаунтов
+
+# БИЗНЕС ОБРАБОТЧИК (для Telegram Business)
 @bot.business_message_handler(
     func=lambda m: getattr(m, "business_connection_id", None) is not None,
     content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"],
@@ -140,6 +154,9 @@ def handle_business(message):
     action, arg = parse_command(message.text)
     bc = message.business_connection_id
     chat_id = message.chat.id
+    
+    # Уникальный ключ для этого конкретного диалога
+    mute_key = (bc, chat_id)
 
     def send(text):
         try:
@@ -148,21 +165,32 @@ def handle_business(message):
             logging.warning("business send failed: %s", e)
 
     if action == "mute_on":
-        muted_business.add(bc)
+        # Запрещаем собеседнику управлять ботом
+        if not is_business_owner(message):
+            send("Только владелец аккаунта может включать антиспам")
+            return
+        muted_business.add(mute_key)
         send("Антиспам включён ✅")
         return
 
     if action == "mute_off":
-        muted_business.discard(bc)
+        if not is_business_owner(message):
+            send("Только владелец аккаунта может выключать антиспам")
+            return
+        muted_business.discard(mute_key)
         send("Антиспам выключен")
         return
 
     if action == "text_spam" and arg:
+        if not is_business_owner(message):
+            return
         spam_send(lambda: bot.send_message(
             chat_id=chat_id, text=arg, business_connection_id=bc))
         return
 
     if action == "sticker_spam":
+        if not is_business_owner(message):
+            return
         if not (message.reply_to_message and message.reply_to_message.sticker):
             send("Ответь этой командой на стикер")
             return
@@ -171,8 +199,10 @@ def handle_business(message):
             chat_id=chat_id, sticker=sid, business_connection_id=bc))
         return
 
-    if bc in muted_business:
+    # Если мут включен именно для этого собеседника
+    if mute_key in muted_business:
         try_delete(chat_id, message.message_id, business_connection_id=bc)
+
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook_handler():
