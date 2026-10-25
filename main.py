@@ -371,7 +371,7 @@ def handle_message(message):
         target = message.reply_to_message.from_user
         if target.id == message.from_user.id: bot.reply_to(message, "Себя нельзя!"); return
         action_ru = "обнять" if action == "hug" else "поцеловать"
-        btn_yes = InlineKeyboardButton("Принять", callback_data=f"act_{action}_yes_{message.from_user.id}_{target.id}
+        btn_yes = InlineKeyboardButton("Принять", callback_data=f"act_{action}_yes_{message.from_user.id}_{target.id}")
         btn_no = InlineKeyboardButton("Отказать", callback_data=f"act_{action}_no_{message.from_user.id}_{target.id}")
         markup = InlineKeyboardMarkup().add(btn_yes, btn_no)
         bot.reply_to(message, f"❤️ <b>{message.from_user.first_name}</b> хочет {action_ru} <b>{target.first_name}</b>.\n{target.first_name}, ты согласен(на)?", parse_mode='HTML', reply_markup=markup)
