@@ -406,7 +406,182 @@ def handle_message(message):
         if not message.reply_to_message: bot.reply_to(message, "Ответь на сообщение человека."); return
         t = message.reply_to_message.from_user.first_name
         u = message.from_user.first_name
-        if action == "pat": bot.reply_to(messag
+        if action == "pat": bot.reply_to(message, f"🤚 <b>{u}</b> погладил(а) <b>{t}</b> по голове!")
+        if action == "hit": bot.reply_to(message, f"👊 <b>{u}</b> ударил(а) <b>{t}</b>!")
+        if action == "bite": bot.reply_to(message, f"🦷 <b>{u}</b> укусил(а) <b>{t}</b>!")
+        if action == "gift": bot.reply_to(message, f"💐 <b>{u}</b> подарил(а) цветы <b>{t}</b>!")
+        return
+
+    if action == "rps":
+        btn_rock = InlineKeyboardButton("Камень", callback_data="rps_rock")
+        btn_scissors = InlineKeyboardButton("Ножницы", callback_data="rps_scissors")
+        btn_paper = InlineKeyboardButton("Бумага", callback_data="rps_paper")
+        markup = InlineKeyboardMarkup().row(btn_rock, btn_scissors, btn_paper)
+        bot.reply_to(message, "🕹 Твой ход!", reply_markup=markup)
+        return
+
+    if action == "mafia":
+        roles = ["🔪 Мафия", "🕵️‍♂️ Комиссар", "💉 Доктор", "👨‍🌾 Мирный житель"]
+        if is_private: bot.reply_to(message, f"Твоя роль: {random.choice(roles)}")
+        else: bot.reply_to(message, "Напиши мне в ЛС <code>.мафия</code>, чтобы получить роль.", parse_mode='HTML')
+        return
+
+# --- БИЗНЕС ОБРАБОТЧИК ---
+@bot.business_message_handler(func=lambda m: getattr(m, "business_connection_id", None) is not None, content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"])
+def handle_business(message):
+    if not message.from_user or message.from_user.is_bot: return
+
+    action, arg = parse_command(message.text)
+    bc, chat_id = message.business_connection_id, message.chat.id
+    mute_key = (bc, chat_id)
+    is_owner = is_business_owner(message)
+
+    def send(text, reply_markup=None):
+        try: bot.send_message(chat_id=chat_id, text=text, business_connection_id=bc, parse_mode='HTML', reply_markup=reply_markup)
+        except: pass
+
+    if mute_key in muted_business and action not in ("mute_off", "stop_spam"):
+        try_delete(chat_id, message.message_id, business_connection_id=bc)
+        return
+
+    if chat_id in auto_replies and not is_owner:
+        threading.Thread(target=delayed_auto_reply, args=(chat_id, bc, auto_replies[chat_id]), daemon=True).start()
+        return
+
+    if action == "mute_on":
+        if not is_owner: send("Только владелец может включать антиспам"); return
+        muted_business.add(mute_key); send("Антиспам включён ✅"); return
+    if action == "mute_off":
+        if not is_owner: send("Только владелец может выключать антиспам"); return
+        muted_business.discard(mute_key); send("Антиспам выключен"); return
+    if action == "stop_spam":
+        if mute_key in active_spam: active_spam[mute_key].set(); send("Спам остановлен 🛑")
+        else: send("Спам и так не запущен")
+        return
+    if action == "text_spam" and arg:
+        if not is_owner: return
+        if not arg.strip(". "): send("Нельзя спамить пустотой."); return
+        spam_send(lambda: bot.send_message(chat_id=chat_id, text=arg, business_connection_id=bc), chat_key=mute_key)
+        return
+    if action == "sticker_spam":
+        if not is_owner: return
+        if not (message.reply_to_message and message.reply_to_message.sticker): send("Ответь на стикер"); return
+        spam_send(lambda: bot.send_sticker(chat_id=chat_id, sticker=message.reply_to_message.sticker.file_id, business_connection_id=bc), chat_key=mute_key)
+        return
+
+    if action == "ping" and is_owner: send("Понг! 🏓"); return
+    if action == "stats" and is_owner: 
+        uptime = int(time.time() - START_TIME)
+        hours, rem = divmod(uptime, 3600)
+        minutes, seconds = divmod(rem, 60)
+        send(f"📊 Версия: {CURRENT_VERSION}\nАптайм: {hours}ч {minutes}м")
+        return
+    if action == "info" and is_owner:
+        if message.reply_to_message:
+            target = message.reply_to_message.from_user
+            send(f"👤 Имя: {target.first_name}\n🆔 ID: <code>{target.id}</code>")
+        else: send(f"🤖 <b>Бот Еува</b>\n📦 Версия: <b>{CURRENT_VERSION}</b>")
+        return
+
+    if action == "dice" and is_owner: bot.send_dice(chat_id, emoji='🎲', business_connection_id=bc); return
+    if action == "d20" and is_owner: send(f"🎲 Выпало: <b>{random.randint(1, 20)}</b>"); return
+    if action == "roulette" and is_owner: bot.send_dice(chat_id, emoji='🎰', business_connection_id=bc); return
+    if action == "random_num" and is_owner: send(f"🎲 Случайное число: <b>{random.randint(1, 100)}</b>"); return
+    if action == "coin" and is_owner: send(f"🪙 {random.choice(['Орёл', 'Решка'])}"); return
+    if action == "ball" and arg and is_owner: send(f"🎱 {random.choice(['Да ✅', 'Нет ❌', 'Определенно да 💯', 'Спроси позже ⏳'])}"); return
+    if action == "who_am_i" and is_owner: send(f"👤 Сегодня ты — <b>{random.choice(['гений 💡', 'котик 🐱', 'миллионер 💰'])}</b>!"); return
+    if action == "tyk" and is_owner: send("Тык! 🫵"); return
+    if action == "fact" and is_owner: send(f"💡 <b>Факт:</b> {random.choice(['У осьминога три сердца.', 'Мед никогда не портится.'])}"); return
+    if action == "riddle" and is_owner: send(f"🤔 <b>Загадка:</b>\n{random.choice(RIDDLES)}"); return
+    if action == "truth" and is_owner: send(f"😳 <b>Правда:</b>\n{random.choice(TRUTHS)}"); return
+    if action == "dare" and is_owner: send(f"🔥 <b>Действие:</b>\n{random.choice(DARES)}"); return
+    if action == "quote" and is_owner: send(f"📜 <i>{random.choice(QUOTES)}</i>"); return
+    if action == "joke" and is_owner: send(f"😂 {random.choice(JOKES)}"); return
+    if action == "compliment" and is_owner: send(random.choice(COMPLIMENTS)); return
+
+    if action == "password" and is_owner:
+        pwd = ''.join(random.choices(string.ascii_letters + string.digits + "!@#$%^&*", k=14))
+        send(f"🔐 Твой пароль:\n<code>{pwd}</code>")
+        return
+    if action == "date" and is_owner: send(f"📅 Сейчас: <b>{datetime.datetime.now().strftime('%d.%m.%Y %H:%M:%S')}</b>"); return
+    if action == "timer" and is_owner:
+        try:
+            secs = int(arg)
+            if secs <= 0 or secs > 86400: raise ValueError
+            send(f"⏱ Таймер на {secs} сек. запущен!")
+            def timer_job():
+                time.sleep(secs)
+                try: bot.send_message(chat_id=chat_id, text=f"🔔 <b>Время вышло!</b> ({secs} сек.)", business_connection_id=bc, parse_mode='HTML')
+                except: pass
+            threading.Thread(target=timer_job, daemon=True).start()
+        except: send("Укажи секунды (1-86400): <code>.таймер 60</code>")
+        return
+
+    if action == "say" and arg and is_owner: bot.send_message(chat_id=chat_id, text=arg, business_connection_id=bc); return
+    if action == "choose" and arg and is_owner:
+        options = [o.strip() for o in arg.split(",") if o.strip()]
+        if options: send(f"🤔 Я выбираю: <b>{random.choice(options)}</b>")
+        else: send("Напиши варианты через запятую: <code>.выбери чай, кофе</code>")
+        return
+    if action == "reverse" and arg and is_owner: send(f"🔄 {arg[::-1]}"); return
+    if action == "upper" and arg and is_owner: send(arg.upper()); return
+    if action == "lower" and arg and is_owner: send(arg.lower()); return
+    if action == "length" and arg and is_owner: send(f"📏 Длина: <b>{len(arg)}</b> симв."); return
+    if action == "shuffle" and arg and is_owner: send(f"🔀 {' '.join(random.sample(arg.split(), len(arg.split())))}"); return
+    if action == "heart" and arg and is_owner: send(arg.replace('а', '4').replace('о', '0').replace('е', '3') + " 💖"); return
+
+    if action in ("hug", "kiss"):
+        if not message.reply_to_message: send("Ответь на сообщение."); return
+        target = message.reply_to_message.from_user
+        if target.id == message.from_user.id: send("Себя нельзя!"); return
+        action_ru = "обнять" if action == "hug" else "поцеловать"
+        
+        btn_yes = InlineKeyboardButton("Принять", callback_data=f"act_{action}_yes_{message.from_user.id}_{target.id}")
+        btn_no = InlineKeyboardButton("Отказать", callback_data=f"act_{action}_no_{message.from_user.id}_{target.id}")
+        markup = InlineKeyboardMarkup().add(btn_yes, btn_no)
+        
+        send(f"❤️ <b>{message.from_user.first_name}</b> хочет {action_ru} <b>{target.first_name}</b>.\n{target.first_name}, ты согласен(на)?", reply_markup=markup)
+        return
+    if action in ("pat", "hit", "bite", "gift"):
+        if not message.reply_to_message: send("Ответь на сообщение."); return
+        t, u = message.reply_to_message.from_user.first_name, message.from_user.first_name
+        if action == "pat": send(f"🤚 <b>{u}</b> погладил(а) <b>{t}</b> по голове!")
+        if action == "hit": send(f"👊 <b>{u}</b> ударил(а) <b>{t}</b>!")
+        if action == "bite": send(f"🦷 <b>{u}</b> укусил(а) <b>{t}</b>!")
+        if action == "gift": send(f"💐 <b>{u}</b> подарил(а) цветы <b>{t}</b>!")
+        return
+
+    if action == "rps" and is_owner:
+        btn_rock = InlineKeyboardButton("Камень", callback_data="rps_rock")
+        btn_scissors = InlineKeyboardButton("Ножницы", callback_data="rps_scissors")
+        btn_paper = InlineKeyboardButton("Бумага", callback_data="rps_paper")
+        markup = InlineKeyboardMarkup().row(btn_rock, btn_scissors, btn_paper)
+        send("🕹 Твой ход!", reply_markup=markup)
+        return
+
+    if action == "mafia": send("Напиши мне в ЛС <code>.мафия</code>, чтобы получить роль."); return
+
+    if action == "auto_on":
+        if not is_owner: return
+        if not arg: send("Напиши: .авто Я занят"); return
+        auto_replies[chat_id] = arg
+        send(f"🤖 Автоответчик включен!\nТекст: <blockquote>{arg}</blockquote>")
+        return
+    if action == "auto_off":
+        if not is_owner: return
+        if chat_id in auto_replies: del auto_replies[chat_id]; send("🤖 Автоответчик выключен.")
+        else: send("Автоответчик и так не работает.")
+        return
+
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook_handler():
+    update = telebot.types.Update.de_json(request.get_data().decode("utf-8"))
+    bot.process_new_updates([update])
+    return "!", 200
+
+@app.route("/")
+def health(): return "ok", 200
+
 if __name__ == "__main__":
     bot.remove_webhook()
     time.sleep(1)
