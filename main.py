@@ -586,6 +586,18 @@ def webhook_handler():
 def health(): return "ok", 200
 
 if __name__ == "__main__":
-bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}", allowed_updates=["message", "edited_message", "callback_query", "business_connection", "business_message", "edited_business_message"])
-threading.Thread(target=notify_owner, daemon=True).start()
-app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    bot.remove_webhook()
+    time.sleep(1)
+    bot.set_webhook(
+        url=f"{WEBHOOK_URL}/{TOKEN}",
+        allowed_updates=[
+            "message",
+            "edited_message",
+            "callback_query",
+            "business_connection",
+            "business_message",
+            "edited_business_message"
+        ]
+    )
+    threading.Thread(target=notify_owner, daemon=True).start()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
