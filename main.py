@@ -110,7 +110,7 @@ def parse_command(text):
     if low.startswith(".перемешай "): return "shuffle", t[11:].strip()
     if low.startswith(".сердце "): return "heart", t[8:].strip()
     if low.startswith(".авто "): return "auto_on", t[6:].strip()
-    if low == ".авто стоп": return "auto_off", ""
+    if low in (".авто стоп", ".автостоп"): return "auto_off", ""
 
     return None, ""
 
@@ -124,7 +124,9 @@ def is_business_owner(message):
     try:
         conn = bot.get_business_connection(message.business_connection_id)
         return conn.user.id == message.from_user.id
-    except: return False
+    except Exception:
+        # Если Telegram выдал ошибку, проверяем по ID чата (владелец и чат не совпадают, а собеседник и чат — совпадают)
+        return message.from_user.id != message.chat.id
 
 def spam_send(fn, chat_key, times=100, delay=0.5):
     stop_event = threading.Event()
@@ -432,13 +434,14 @@ def handle_business(message):
         try_delete(chat_id, message.message_id, business_connection_id=bc)
         return
 
-    if chat_id in auto_replies and not is_owner:
-        threading.Thread(target=delayed_auto_reply, args=(chat_id, bc, auto_replies[chat_id]), daemon=True).start()
-        return
-
     # Защита от дублей: если команду пишет собеседник, игнорируем её
-    if action and not is_owner:
-        return
+if action and not is_owner:
+    return
+
+# Автоответчик срабатывает только на обычные сообщения от собеседника
+if not action and chat_id in auto_replies and not is_owner:
+    threading.Thread(target=delayed_auto_reply, args=(chat_id, bc, auto_replies[chat_id]), daemon=True).start()
+    return
     
     if action == "mute_on":
         if not is_owner: send("Только владелец может включать антиспам"); return
