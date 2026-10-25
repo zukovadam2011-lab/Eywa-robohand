@@ -436,6 +436,10 @@ def handle_business(message):
         threading.Thread(target=delayed_auto_reply, args=(chat_id, bc, auto_replies[chat_id]), daemon=True).start()
         return
 
+    # Защита от дублей: если команду пишет собеседник, игнорируем её
+    if action and not is_owner:
+    return
+    
     if action == "mute_on":
         if not is_owner: send("Только владелец может включать антиспам"); return
         muted_business.add(mute_key); send("Антиспам включён ✅"); return
