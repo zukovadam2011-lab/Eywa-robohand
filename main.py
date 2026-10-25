@@ -165,7 +165,8 @@ def delayed_auto_reply(chat_id, bc, text):
 def send_welcome(message):
     if message.chat.type == 'private':
         markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("📖 Открыть меню и правила", callback_data="show_help"))
+        btn_help = InlineKeyboardButton("Открыть меню и правила", callback_data="show_help")
+        markup.add(btn_help)
         bot.send_message(message.chat.id, "Привет! Я бот <b>Еува</b>. 👋\nНажми кнопку ниже, чтобы узнать всё о моих способностях.", parse_mode='HTML', reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_help")
@@ -203,49 +204,78 @@ def handle_action_callback(call):
     bot.answer_callback_query(call.id)
     try:
         data = call.data.split("_")
-        action_type, choice, initiator_id, target_id = data[1], data[2], data[3], data[4]
+        action_type = data[1]
+        choice = data[2]
+        initiator_id = data[3]
+        target_id = data[4]
+        
         if str(call.from_user.id) != str(target_id):
             bot.answer_callback_query(call.id, "Эта кнопка не для тебя! 😉", show_alert=True)
             return
-        try: initiator = bot.get_chat(int(initiator_id)).first_name
-        except: initiator = "Кто-то"
+            
+        try: 
+            initiator = bot.get_chat(int(initiator_id)).first_name
+        except: 
+            initiator = "Кто-то"
+            
         target = call.from_user.first_name
         
         if choice == "yes":
-            if action_type == "hug": text = f"🤗 <b>{target}</b> с радостью обнял(а) <b>{initiator}</b>!"
-            else: text = f"😘 <b>{target}</b> поцеловал(а) <b>{initiator}</b>!"
+            if action_type == "hug": 
+                text = f"🤗 <b>{target}</b> с радостью обнял(а) <b>{initiator}</b>!"
+            else: 
+                text = f"😘 <b>{target}</b> поцеловал(а) <b>{initiator}</b>!"
         else:
-            if action_type == "hug": text = f"💔 <b>{target}</b> уклонился(ась) от объятий <b>{initiator}</b>..."
-            else: text = f"🚫 <b>{target}</b> дал(а) пощёчину <b>{initiator}</b>!"
+            if action_type == "hug": 
+                text = f"💔 <b>{target}</b> уклонился(ась) от объятий <b>{initiator}</b>..."
+            else: 
+                text = f"🚫 <b>{target}</b> дал(а) пощёчину <b>{initiator}</b>!"
 
         bc_id = getattr(call.message, "business_connection_id", None)
-        chat_id, msg_id = call.message.chat.id, call.message.message_id
+        chat_id = call.message.chat.id
+        msg_id = call.message.message_id
+        
         try:
-            if bc_id: bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
-            else: bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML')
+            if bc_id: 
+                bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
+            else: 
+                bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML')
         except:
-            if bc_id: bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
-            else: bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML')
-    except: pass
+            if bc_id: 
+                bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
+            else: 
+                bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML')
+    except: 
+        pass
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("rps_"))
 def handle_rps_callback(call):
     bot.answer_callback_query(call.id)
     user_choice = call.data.split("_")[1]
     bot_choice = random.choice(["rock", "scissors", "paper"])
-    names = {"rock": "🪨 Камень", "scissors": "✂️ Ножницы", "paper": "📄 Бумага"}
     
-    if user_choice == bot_choice: result = "🤝 Ничья!"
-    elif (user_choice == "rock" and bot_choice == "scissors") or (user_choice == "scissors" and bot_choice == "paper") or (user_choice == "paper" and bot_choice == "rock"): result = "🎉 Ты победил!"
-    else: result = "💻 Я победил!"
+    names = {"rock": "Камень", "scissors": "Ножницы", "paper": "Бумага"}
+    
+    if user_choice == bot_choice: 
+        result = "🤝 Ничья!"
+    elif (user_choice == "rock" and bot_choice == "scissors") or (user_choice == "scissors" and bot_choice == "paper") or (user_choice == "paper" and bot_choice == "rock"): 
+        result = "🎉 Ты победил!"
+    else: 
+        result = "💻 Я победил!"
         
     text = f"Твой выбор: {names[user_choice]}\nМой выбор: {names[bot_choice]}\n\n<b>{result}</b>"
+    
     bc_id = getattr(call.message, "business_connection_id", None)
-    chat_id, msg_id = call.message.chat.id, call.message.message_id
+    chat_id = call.message.chat.id
+    msg_id = call.message.message_id
+    
     try:
-        if bc_id: bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
-        else: bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML')
-    except: pass
+        if bc_id: 
+            bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
+        else: 
+            bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML')
+    except: 
+        pass
 
 # --- ОБЫЧНЫЙ ОБРАБОТЧИК ---
 @bot.message_handler(func=lambda m: getattr(m, "business_connection_id", None) is None, content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"])
@@ -256,7 +286,8 @@ def handle_message(message):
     is_private = message.chat.type == "private"
     chat_key = message.chat.id
     if chat_key in muted_chats and action not in ("mute_off", "stop_spam"):
-        try_delete(chat_key, message.message_id); return
+        try_delete(chat_key, message.message_id)
+        return
 
     if action == "mute_on":
         if is_private or is_group_admin(message):
@@ -276,11 +307,13 @@ def handle_message(message):
     if action == "text_spam" and arg:
         if not is_private and not is_group_admin(message): return
         if not arg.strip(". "): bot.reply_to(message, "Нельзя спамить пустотой."); return
-        spam_send(lambda: bot.send_message(chat_key, arg), chat_key=chat_key); return
+        spam_send(lambda: bot.send_message(chat_key, arg), chat_key=chat_key)
+        return
     if action == "sticker_spam":
         if not is_private and not is_group_admin(message): return
         if not (message.reply_to_message and message.reply_to_message.sticker): return
-        spam_send(lambda: bot.send_sticker(chat_key, message.reply_to_message.sticker.file_id), chat_key=chat_key); return
+        spam_send(lambda: bot.send_sticker(chat_key, message.reply_to_message.sticker.file_id), chat_key=chat_key)
+        return
 
     if action == "ping": bot.reply_to(message, "Понг! 🏓"); return
     if action == "stats":
@@ -304,13 +337,15 @@ def handle_message(message):
     if action == "d20": bot.reply_to(message, f"🎲 Выпало: <b>{random.randint(1, 20)}</b>", parse_mode='HTML'); return
     if action == "roulette": bot.send_dice(chat_key, emoji='🎰'); return
     if action == "random_num": bot.reply_to(message, f"🎲 Случайное число: <b>{random.randint(1, 100)}</b>", parse_mode='HTML'); return
-    if action == "coin": bot.reply_to(message, f"🪙 {random.choice(['Орёл 🦅', 'Решка 🪙'])}"); return
+    if action == "coin": bot.reply_to(message, f"🪙 {random.choice(['Орёл', 'Решка'])}"); return
     if action == "ball" and arg:
         answers = ["Да ✅", "Нет ❌", "Определенно да 💯", "Даже не думай 🤔", "Спроси позже ⏳"]
-        bot.reply_to(message, f"🎱 {random.choice(answers)}"); return
+        bot.reply_to(message, f"🎱 {random.choice(answers)}")
+        return
     if action == "who_am_i":
         phrases = ["гений 💡", "ленивец 🦥", "котик 🐱", "путешественник 🌍", "программист 💻", "звезда ⭐", "миллионер 💰", "шпион 🕵️"]
-        bot.reply_to(message, f"👤 Сегодня ты — <b>{random.choice(phrases)}</b>!", parse_mode='HTML'); return
+        bot.reply_to(message, f"👤 Сегодня ты — <b>{random.choice(phrases)}</b>!", parse_mode='HTML')
+        return
     if action == "tyk": bot.reply_to(message, "Тык! 🫵"); return
     if action == "fact": bot.reply_to(message, f"💡 <b>Факт:</b> {random.choice(['У осьминога три сердца.', 'Мед никогда не портится.', 'Акулы старше деревьев.', 'У улитки 10000 зубов.'])}", parse_mode='HTML'); return
     if action == "riddle": bot.reply_to(message, f"🤔 <b>Загадка:</b>\n{random.choice(RIDDLES)}"); return
@@ -322,10 +357,12 @@ def handle_message(message):
 
     if action == "password":
         pwd = ''.join(random.choices(string.ascii_letters + string.digits + "!@#$%^&*", k=14))
-        bot.reply_to(message, f"🔐 Твой пароль:\n<code>{pwd}</code>", parse_mode='HTML'); return
+        bot.reply_to(message, f"🔐 Твой пароль:\n<code>{pwd}</code>", parse_mode='HTML')
+        return
     if action == "date":
         now = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-        bot.reply_to(message, f"📅 Сейчас: <b>{now}</b>", parse_mode='HTML'); return
+        bot.reply_to(message, f"📅 Сейчас: <b>{now}</b>", parse_mode='HTML')
+        return
     if action == "timer":
         try:
             secs = int(arg)
@@ -357,22 +394,16 @@ def handle_message(message):
         target = message.reply_to_message.from_user
         if target.id == message.from_user.id: bot.reply_to(message, "Себя нельзя!"); return
         action_ru = "обнять" if action == "hug" else "поцеловать"
-        markup = InlineKeyboardMarkup().add(
-            InlineKeyboardButton("✅ Принять", callback_data=f"act_{action}_yes_{message.from_user.id}_{target.id}"),
-            InlineKeyboardButton("❌ Отказать", callback_data=f"act_{action}_no_{message.from_user.id}_{target.id}")
-        )
+        
+        # БЕЗОПАСНОЕ СОЗДАНИЕ КНОПОК
+        btn_yes = InlineKeyboardButton("Принять", callback_data=f"act_{action}_yes_{message.from_user.id}_{target.id}")
+        btn_no = InlineKeyboardButton("Отказать", callback_data=f"act_{action}_no_{message.from_user.id}_{target.id}")
+        markup = InlineKeyboardMarkup().add(btn_yes, btn_no)
+        
         bot.reply_to(message, f"❤️ <b>{message.from_user.first_name}</b> хочет {action_ru} <b>{target.first_name}</b>.\n{target.first_name}, ты согласен(на)?", parse_mode='HTML', reply_markup=markup)
         return
     if action in ("pat", "hit", "bite", "gift"):
         if not message.reply_to_message: bot.reply_to(message, "Ответь на сообщение человека."); return
         t = message.reply_to_message.from_user.first_name
         u = message.from_user.first_name
-        if action == "pat": bot.reply_to(message, f"🤚 <b>{u}</b> погладил(а) <b>{t}</b> по голове!")
-        if action == "hit": bot.reply_to(message, f"👊 <b>{u}</b> ударил(а) <b>{t}</b>!")
-        if action == "bite": bot.reply_to(message, f"🦷 <b>{u}</b> укусил(а) <b>{t}</b>!")
-        if action == "gift": bot.reply_to(message, f"💐 <b>{u}</b> подарил(а) цветы <b>{t}</b>!")
-        return
-
-    if action == "rps":
-        markup = InlineKeyboardMarkup().row(
-            InlineKeyboardButton("?
+        if action == "pat": bot.reply_to(messag
