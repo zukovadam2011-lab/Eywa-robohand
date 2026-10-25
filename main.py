@@ -434,15 +434,15 @@ def handle_business(message):
         try_delete(chat_id, message.message_id, business_connection_id=bc)
         return
 
-    if mute_key in muted_business and action not in ("mute_off", "stop_spam"):
-    try_delete(chat_id, message.message_id, business_connection_id=bc)
-    return
-
-    # Вот здесь нужны отступы! Сдвинь эти строки вправо.
-    # Защита от дублей: если команду пишет собеседник, игнорируем её
     if action and not is_owner:
-       return
+        return
 
+    if not action and chat_id in auto_replies and not is_owner:
+        threading.Thread(target=delayed_auto_reply, args=(chat_id, bc, auto_replies[chat_id]), daemon=True).start()
+        return
+
+    if action == "mute_on":
+    
 # Автоответчик срабатывает только на обычные сообщения от собеседника
 if not action and chat_id in auto_replies and not is_owner:
     threading.Thread(target=delayed_auto_reply, args=(chat_id, bc, auto_replies[chat_id]), daemon=True).start()
