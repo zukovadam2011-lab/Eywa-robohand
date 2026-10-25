@@ -407,3 +407,9 @@ def handle_message(message):
         t = message.reply_to_message.from_user.first_name
         u = message.from_user.first_name
         if action == "pat": bot.reply_to(messag
+if __name__ == "__main__":
+    bot.remove_webhook()
+    time.sleep(1)
+    bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}", allowed_updates=["message", "edited_message", "callback_query", "business_connection", "business_message", "edited_business_message"])
+    threading.Thread(target=notify_owner, daemon=True).start()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
