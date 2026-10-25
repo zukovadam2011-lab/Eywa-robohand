@@ -50,7 +50,8 @@ def notify_owner():
         except: pass
     if last_version != CURRENT_VERSION:
         if OWNER_ID != 0:
-            try: bot.send_message(OWNER_ID, f"🚀 <b>Eywa обновлена до v{CURRENT_VERSION}!</b>\nЗагляни в /start, там теперь 30+ команд!", parse_mode='HTML')
+            try: 
+                bot.send_message(OWNER_ID, f"🚀 <b>Eywa обновлена до v{CURRENT_VERSION}!</b>\nЗагляни в /start, там теперь 30+ команд!", parse_mode='HTML')
             except: pass
         try:
             with open(VERSION_FILE, "w") as f: json.dump({"version": CURRENT_VERSION}, f)
@@ -158,7 +159,8 @@ def try_delete(chat_id, message_id, business_connection_id=None):
 
 def delayed_auto_reply(chat_id, bc, text):
     time.sleep(3) 
-    try: bot.send_message(chat_id=chat_id, text=text, business_connection_id=bc, parse_mode='HTML')
+    try: 
+        bot.send_message(chat_id=chat_id, text=text, business_connection_id=bc, parse_mode='HTML')
     except: pass
 
 # --- КОМАНДА /start И МЕНЮ ---
@@ -203,7 +205,8 @@ def callback_show_help(call):
         "<b>💼 ДЛЯ АВТОМАТИЗАЦИИ ЧАТОВ:</b>\n"
         "🔹 <code>.авто [текст]</code> и <code>.авто стоп</code>"
     )
-    try: bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=help_text, parse_mode='HTML', reply_markup=None)
+    try: 
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=help_text, parse_mode='HTML', reply_markup=None)
     except: pass
 
 # --- КНОПКИ ---
@@ -276,7 +279,9 @@ def handle_message(message):
             bot.reply_to(message, "Антиспам включён ✅")
         return
     if action == "mute_off":
-        if is_private or is_group_admin(message): muted_chats.discard(chat_key); bot.reply_to(message, "Антиспам выключен")
+        if is_private or is_group_admin(message): 
+            muted_chats.discard(chat_key)
+            bot.reply_to(message, "Антиспам выключен")
         return
     if action == "stop_spam":
         if chat_key in active_spam: active_spam[chat_key].set(); bot.reply_to(message, "Спам остановлен 🛑")
@@ -292,50 +297,89 @@ def handle_message(message):
         spam_send(lambda: bot.send_sticker(chat_key, message.reply_to_message.sticker.file_id), chat_key=chat_key); return
 
     # --- ИНФО И СТАТИСТИКА ---
-    if action == "ping": bot.reply_to(message, "Понг! 🏓"); return
+    if action == "ping": 
+        bot.reply_to(message, "Понг! 🏓")
+        return
     if action == "stats":
         uptime = int(time.time() - START_TIME)
         hours, rem = divmod(uptime, 3600)
         minutes, seconds = divmod(rem, 60)
-        bot.reply_to(message, f"📊 <b>Статистика:</b>\nВерсия: {CURRENT_VERSION}\nАптайм: {hours}ч {minutes}м {seconds}с", parse_mode='HTML"); return
+        stats_text = (
+            f"📊 <b>Статистика:</b>\n"
+            f"Версия: {CURRENT_VERSION}\n"
+            f"Аптайм: {hours}ч {minutes}м {seconds}с"
+        )
+        bot.reply_to(message, stats_text, parse_mode='HTML')
+        return
     if action == "info":
         if message.reply_to_message:
             target = message.reply_to_message.from_user
             bot.reply_to(message, f"👤 Имя: {target.first_name}\n🆔 ID: <code>{target.id}</code>", parse_mode='HTML')
-        elif is_private: bot.reply_to(message, f"🤖 <b>Бот Еува</b>\n📦 Версия: <b>{CURRENT_VERSION}</b>", parse_mode='HTML')
+        elif is_private: 
+            bot.reply_to(message, f"🤖 <b>Бот Еува</b>\n📦 Версия: <b>{CURRENT_VERSION}</b>", parse_mode='HTML')
         else:
             target = message.from_user
             bot.reply_to(message, f"👤 Имя: {target.first_name}\n🆔 ID: <code>{target.id}</code>", parse_mode='HTML')
         return
 
     # --- ИГРЫ И РАНДОМ ---
-    if action == "dice": bot.send_dice(chat_key, emoji='🎲'); return
-    if action == "d20": bot.reply_to(message, f"🎲 Выпало: <b>{random.randint(1, 20)}</b>", parse_mode='HTML'); return
-    if action == "roulette": bot.send_dice(chat_key, emoji='🎰'); return
-    if action == "random_num": bot.reply_to(message, f"🎲 Случайное число: <b>{random.randint(1, 100)}</b>", parse_mode='HTML'); return
-    if action == "coin": bot.reply_to(message, f"🪙 {random.choice(['Орёл 🦅', 'Решка 🪙'])}"); return
+    if action == "dice": 
+        bot.send_dice(chat_key, emoji='🎲')
+        return
+    if action == "d20": 
+        bot.reply_to(message, f"🎲 Выпало: <b>{random.randint(1, 20)}</b>", parse_mode='HTML')
+        return
+    if action == "roulette": 
+        bot.send_dice(chat_key, emoji='🎰')
+        return
+    if action == "random_num": 
+        bot.reply_to(message, f"🎲 Случайное число: <b>{random.randint(1, 100)}</b>", parse_mode='HTML')
+        return
+    if action == "coin": 
+        bot.reply_to(message, f"🪙 {random.choice(['Орёл 🦅', 'Решка 🪙'])}")
+        return
     if action == "ball" and arg:
         answers = ["Да ✅", "Нет ❌", "Определенно да 💯", "Даже не думай 🤔", "Спроси позже ⏳"]
-        bot.reply_to(message, f"🎱 {random.choice(answers)}"); return
+        bot.reply_to(message, f"🎱 {random.choice(answers)}")
+        return
     if action == "who_am_i":
         phrases = ["гений 💡", "ленивец 🦥", "котик 🐱", "путешественник 🌍", "программист 💻", "звезда ⭐", "миллионер 💰", "шпион 🕵️"]
-        bot.reply_to(message, f"👤 Сегодня ты — <b>{random.choice(phrases)}</b>!", parse_mode='HTML'); return
-    if action == "tyk": bot.reply_to(message, "Тык! 🫵"); return
-    if action == "fact": bot.reply_to(message, f"💡 <b>Факт:</b> {random.choice(['У осьминога три сердца.', 'Мед никогда не портится.', 'Акулы старше деревьев.', 'У улитки 10000 зубов.'])}", parse_mode='HTML'); return
-    if action == "riddle": bot.reply_to(message, f"🤔 <b>Загадка:</b>\n{random.choice(RIDDLES)}"); return
-    if action == "truth": bot.reply_to(message, f"😳 <b>Правда:</b>\n{random.choice(TRUTHS)}"); return
-    if action == "dare": bot.reply_to(message, f"🔥 <b>Действие:</b>\n{random.choice(DARES)}"); return
-    if action == "quote": bot.reply_to(message, f"📜 <i>{random.choice(QUOTES)}</i>", parse_mode='HTML'); return
-    if action == "joke": bot.reply_to(message, f"😂 {random.choice(JOKES)}"); return
-    if action == "compliment": bot.reply_to(message, random.choice(COMPLIMENTS)); return
+        bot.reply_to(message, f"👤 Сегодня ты — <b>{random.choice(phrases)}</b>!", parse_mode='HTML')
+        return
+    if action == "tyk": 
+        bot.reply_to(message, "Тык! 🫵")
+        return
+    if action == "fact": 
+        bot.reply_to(message, f"💡 <b>Факт:</b> {random.choice(['У осьминога три сердца.', 'Мед никогда не портится.', 'Акулы старше деревьев.', 'У улитки 10000 зубов.'])}", parse_mode='HTML')
+        return
+    if action == "riddle": 
+        bot.reply_to(message, f"🤔 <b>Загадка:</b>\n{random.choice(RIDDLES)}")
+        return
+    if action == "truth": 
+        bot.reply_to(message, f"😳 <b>Правда:</b>\n{random.choice(TRUTHS)}")
+        return
+    if action == "dare": 
+        bot.reply_to(message, f"🔥 <b>Действие:</b>\n{random.choice(DARES)}")
+        return
+    if action == "quote": 
+        bot.reply_to(message, f"📜 <i>{random.choice(QUOTES)}</i>", parse_mode='HTML')
+        return
+    if action == "joke": 
+        bot.reply_to(message, f"😂 {random.choice(JOKES)}")
+        return
+    if action == "compliment": 
+        bot.reply_to(message, random.choice(COMPLIMENTS))
+        return
 
     # --- УТИЛИТЫ ---
     if action == "password":
         pwd = ''.join(random.choices(string.ascii_letters + string.digits + "!@#$%^&*", k=14))
-        bot.reply_to(message, f"🔐 Твой пароль:\n<code>{pwd}</code>", parse_mode='HTML'); return
+        bot.reply_to(message, f"🔐 Твой пароль:\n<code>{pwd}</code>", parse_mode='HTML')
+        return
     if action == "date":
         now = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-        bot.reply_to(message, f"📅 Сейчас: <b>{now}</b>", parse_mode='HTML'); return
+        bot.reply_to(message, f"📅 Сейчас: <b>{now}</b>", parse_mode='HTML')
+        return
     if action == "timer":
         try:
             secs = int(arg)
@@ -346,29 +390,33 @@ def handle_message(message):
                 try: bot.reply_to(message, f"🔔 <b>Время вышло!</b> ({secs} сек.)", parse_mode='HTML')
                 except: pass
             threading.Thread(target=timer_job, daemon=True).start()
-        except: bot.reply_to(message, "Укажи секунды (1-86400): <code>.таймер 60</code>", parse_mode='HTML')
+        except: 
+            bot.reply_to(message, "Укажи секунды (1-86400): <code>.таймер 60</code>", parse_mode='HTML')
         return
 
     # --- ТЕКСТОВЫЕ ФИШКИ ---
-    if action == "say" and arg: bot.send_message(chat_key, arg); return
+    if action == "say" and arg: 
+        bot.send_message(chat_key, arg)
+        return
     if action == "choose" and arg:
         options = [o.strip() for o in arg.split(",") if o.strip()]
         if options: bot.reply_to(message, f"🤔 Я выбираю: <b>{random.choice(options)}</b>", parse_mode='HTML')
         else: bot.reply_to(message, "Напиши варианты через запятую: <code>.выбери чай, кофе</code>", parse_mode='HTML')
         return
-    if action == "reverse" and arg: bot.reply_to(message, f"🔄 {arg[::-1]}"); return
-    if action == "upper" and arg: bot.reply_to(message, arg.upper()); return
-    if action == "lower" and arg: bot.reply_to(message, arg.lower()); return
-    if action == "length" and arg: bot.reply_to(message, f"📏 Длина текста: <b>{len(arg)}</b> симв.", parse_mode='HTML'); return
-    if action == "shuffle" and arg: bot.reply_to(message, f"🔀 {' '.join(random.sample(arg.split(), len(arg.split())))}"); return
-    if action == "heart" and arg: bot.reply_to(message, arg.replace('а', '4').replace('о', '0').replace('е', '3') + " 💖"); return
-    if action == "morse" and arg:
-        morse = ' '.join(MORSE_CODE_DICT.get(c.upper(), '') for c in arg)
-        if morse.strip(): bot.reply_to(message, f"📡 <code>{morse}</code>", parse_mode='HTML')
+    if action == "reverse" and arg: 
+        bot.reply_to(message, f"🔄 {arg[::-1]}")
         return
-
-    # --- ВЗАИМОДЕЙСТВИЯ ---
-    if action in ("hug", "kiss"):
-        if not message.reply_to_message: bot.reply_to(message, "Ответь на сообщение человека."); return
-        target = message.reply_to_message.from_user
-        if target.id == mes
+    if action == "upper" and arg: 
+        bot.reply_to(message, arg.upper())
+        return
+    if action == "lower" and arg: 
+        bot.reply_to(message, arg.lower())
+        return
+    if action == "length" and arg: 
+        bot.reply_to(message, f"📏 Длина текста: <b>{len(arg)}</b> симв.", parse_mode='HTML')
+        return
+    if action == "shuffle" and arg: 
+        bot.reply_to(message, f"🔀 {' '.join(random.sample(arg.split(), len(arg.split())))}")
+        return
+    if action == "heart" and arg: 
+        bot.reply_to(message, arg
