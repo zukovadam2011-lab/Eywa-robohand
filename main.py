@@ -438,7 +438,7 @@ def handle_business(message):
 
     # Защита от дублей: если команду пишет собеседник, игнорируем её
     if action and not is_owner:
-    return
+        return
     
     if action == "mute_on":
         if not is_owner: send("Только владелец может включать антиспам"); return
