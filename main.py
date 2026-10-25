@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 # ==========================================
 # ТУТ МЕНЯЕШЬ ВЕРСИЮ ПРИ ОБНОВЛЕНИИ
-CURRENT_VERSION = "2.0" 
+CURRENT_VERSION = "2.1" 
 # ==========================================
 
 START_TIME = time.time()
@@ -30,6 +30,9 @@ muted_chats = set()
 muted_business = set()
 active_spam = {}
 auto_replies = {}
+
+# Хранилище для PvP игр
+rps_games = {}
 
 # --- БАЗЫ ДАННЫХ ---
 QUOTES = ["Всё, что нас не убивает, делает нас сильнее.", "Единственный способ сделать работу хорошо — любить её.", "Не откладывай на завтра то, что можно сделать сегодня."]
@@ -49,7 +52,7 @@ def notify_owner():
     if last_version != CURRENT_VERSION:
         if OWNER_ID != 0:
             try: 
-                bot.send_message(OWNER_ID, f"🚀 <b>Eywa обновлена до v{CURRENT_VERSION}!</b>\nЗагляни в /start, там теперь 30+ команд!", parse_mode='HTML')
+                bot.send_message(OWNER_ID, f"🚀 <b>Eywa обновлена до v{CURRENT_VERSION}!</b>\nДобавлен режим PvP для игры в Камень-Ножницы-Бумага!", parse_mode='HTML')
             except: pass
         try:
             with open(VERSION_FILE, "w") as f: json.dump({"version": CURRENT_VERSION}, f)
@@ -172,69 +175,33 @@ def send_welcome(message):
 @bot.callback_query_handler(func=lambda call: call.data == "show_help")
 def callback_show_help(call):
     bot.answer_callback_query(call.id)
-    
-    # Текст разбит на короткие строки в скобках, чтобы телефон не сломал код при копировании
     help_text = (
         f"<b>🌟 ЕУВА — МЕГА-АССИСТЕНТ (v{CURRENT_VERSION}) 🌟</b>\n\n"
-        
-        "<b>⚙️ ПОДКЛЮЧЕНИЕ (Бесплатно):</b>\n"
-        "<blockquote>Открой <b>Настройки</b> Telegram -> <b>Аккаунт</b> -> <b>Автоматизация чатов</b> -> Выбери бота <b>Еува</b>.</blockquote>\n"
+        "<b>⚙️ ПОДКЛЮЧЕНИЕ:</b>\n"
+        "<blockquote>Настройки -> Аккаунт -> Автоматизация чатов -> Выбрать Еува.</blockquote>\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        
-        "<b>🛡 УПРАВЛЕНИЕ АНТИСПАМОМ:</b>\n"
-        "🔹 <code>.мут</code> — Включает антиспам (удаляет все сообщения в чате).\n"
-        "🔹 <code>.размут</code> — Выключает антиспам.\n\n"
-        
-        "<b>💥 СПАМ-АТАКА (для приколов):</b>\n"
-        "🔹 <code>.с [текст]</code> — Отправить текст 100 раз (работает только для админов).\n"
-        "🔹 <code>.ст</code> — Отправить 100 стикеров (напиши в ответ на любой стикер).\n"
-        "🔹 <code>.стоп</code> — Мгновенно остановить спам.\n\n"
-        
-        "<b>🎲 ИГРЫ И РАНДОМ:</b>\n"
-        "🔹 <code>.монетка</code> — Орел или Решка.\n"
-        "🔹 <code>.кубик20</code> — Бросок кубика D20 (от 1 до 20).\n"
-        "🔹 <code>.загадка</code> — Задать случайную загадку.\n"
-        "🔹 <code>.правда</code> / <code>.действие</code> — Игра «Правда или Действие».\n"
-        "🔹 <code>.выбери [a, b, c]</code> — Бот выберет один вариант из твоего списка.\n"
-        "🔹 <code>.кнб</code> — Камень-Ножницы-Бумага (с кнопками).\n"
-        "🔹 <code>.мафия</code> — Раздать роли в игре (напиши в ЛС бота).\n\n"
-        
-        "<b>🤝 ВЗАИМОДЕЙСТВИЯ (в ответ на сообщение):</b>\n"
-        "🔹 <code>.обнять</code> / <code>.поцеловать</code> — Предложить действие с кнопками «Принять/Отказать».\n"
-        "🔹 <code>.погладить</code>, <code>.ударить</code>, <code>.укусить</code>, <code>.подарить</code> — Забавные действия с собеседником.\n\n"
-        
-        "<b>📝 ТЕКСТОВЫЕ ФИШКИ:</b>\n"
-        "🔹 <code>.переверни [текст]</code> — Переворачивает текст задом наперед.\n"
-        "🔹 <code>.верхний</code> / <code>.нижний</code> — Меняет регистр (КАПС или строчные).\n"
-        "🔹 <code>.длина [текст]</code> — Считает количество символов.\n"
-        "🔹 <code>.перемешай [текст]</code> — Перемешивает слова в предложении.\n"
-        "🔹 <code>.сердце [текст]</code> — Заменяет буквы на цифры (l0v3 стиль).\n\n"
-        
+        "<b>🛡 АНТИСПАМ:</b> <code>.мут</code> / <code>.размут</code>\n"
+        "<b>💥 СПАМ:</b> <code>.с [текст]</code>, <code>.ст</code>, <code>.стоп</code>\n\n"
+        "<b>🎲 ИГРЫ:</b>\n"
+        "🔹 <code>.кнб</code> — Камень-Ножницы-Бумага (в ответ на сообщение — PvP дуэль, без ответа — с ботом).\n"
+        "🔹 <code>.монетка</code>, <code>.кубик20</code>, <code>.загадка</code>\n"
+        "🔹 <code>.правда</code> / <code>.действие</code>\n"
+        "🔹 <code>.выбери [a, b, c]</code>\n\n"
+        "<b>🤝 ВЗАИМОДЕЙСТВИЯ (в ответ):</b>\n"
+        "🔹 <code>.обнять</code>, <code>.поцеловать</code> (с кнопками)\n"
+        "🔹 <code>.погладить</code>, <code>.ударить</code>, <code>.укусить</code>, <code>.подарить</code>\n\n"
+        "<b>📝 ТЕКСТ:</b>\n"
+        "🔹 <code>.переверни</code>, <code>.верхний</code>, <code>.нижний</code>, <code>.длина</code>\n"
+        "🔹 <code>.перемешай</code>, <code>.сердце</code>\n\n"
         "<b>🛠 УТИЛИТЫ:</b>\n"
-        "🔹 <code>.пароль</code> — Генерирует сложный пароль (14 символов).\n"
-        "🔹 <code>.цитата</code>, <code>.анекдот</code>, <code>.комплимент</code> — Выдает случайный текст.\n"
-        "🔹 <code>.таймер [сек]</code> — Напоминалка (например, .таймер 60).\n"
-        "🔹 <code>.дата</code> — Показывает текущую дату и время.\n"
-        "🔹 <code>.статистика</code> — Показывает версию и время работы бота.\n"
-        "🔹 <code>.рандом</code> — Случайное число от 1 до 100.\n"
-        "🔹 <code>.факт</code>, <code>.ктоя</code>, <code>.шар</code> — Развлекательные генераторы.\n"
-        "🔹 <code>.инфо</code> — Узнать ID человека (в ответ) или версию бота (без ответа).\n\n"
-        
-        "<b>💼 ДЛЯ АВТОМАТИЗАЦИИ ЧАТОВ:</b>\n"
-        "🔹 <code>.авто [текст]</code> — Включить умный автоответчик (ответит через 3 секунды).\n"
-        "🔹 <code>.авто стоп</code> — Выключить автоответчик."
+        "🔹 <code>.пароль</code>, <code>.цитата</code>, <code>.анекдот</code>, <code>.комплимент</code>\n"
+        "🔹 <code>.таймер [сек]</code>, <code>.дата</code>, <code>.статистика</code>\n"
+        "🔹 <code>.рандом</code>, <code>.факт</code>, <code>.ктоя</code>, <code>.шар</code>\n\n"
+        "<b>💼 БИЗНЕС:</b> <code>.авто [текст]</code> и <code>.авто стоп</code>"
     )
-    
     try: 
-        bot.edit_message_text(
-            chat_id=call.message.chat.id, 
-            message_id=call.message.message_id, 
-            text=help_text, 
-            parse_mode='HTML', 
-            reply_markup=None
-        )
-    except: 
-        pass
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=help_text, parse_mode='HTML', reply_markup=None)
+    except: pass
 
 # --- КНОПКИ ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("act_"))
@@ -242,50 +209,32 @@ def handle_action_callback(call):
     bot.answer_callback_query(call.id)
     try:
         data = call.data.split("_")
-        action_type = data[1]
-        choice = data[2]
-        initiator_id = data[3]
-        target_id = data[4]
-        
+        action_type, choice, initiator_id, target_id = data[1], data[2], data[3], data[4]
         if str(call.from_user.id) != str(target_id):
             bot.answer_callback_query(call.id, "Эта кнопка не для тебя! 😉", show_alert=True)
             return
-            
-        try: 
-            initiator = bot.get_chat(int(initiator_id)).first_name
-        except: 
-            initiator = "Кто-то"
-            
+        try: initiator = bot.get_chat(int(initiator_id)).first_name
+        except: initiator = "Кто-то"
         target = call.from_user.first_name
         
         if choice == "yes":
-            if action_type == "hug": 
-                text = f"🤗 <b>{target}</b> с радостью обнял(а) <b>{initiator}</b>!"
-            else: 
-                text = f"😘 <b>{target}</b> поцеловал(а) <b>{initiator}</b>!"
+            if action_type == "hug": text = f"🤗 <b>{target}</b> с радостью обнял(а) <b>{initiator}</b>!"
+            else: text = f"😘 <b>{target}</b> поцеловал(а) <b>{initiator}</b>!"
         else:
-            if action_type == "hug": 
-                text = f"💔 <b>{target}</b> уклонился(ась) от объятий <b>{initiator}</b>..."
-            else: 
-                text = f"🚫 <b>{target}</b> дал(а) пощёчину <b>{initiator}</b>!"
+            if action_type == "hug": text = f"💔 <b>{target}</b> уклонился(ась) от объятий <b>{initiator}</b>..."
+            else: text = f"🚫 <b>{target}</b> дал(а) пощёчину <b>{initiator}</b> за попытку поцелуя!"
 
         bc_id = getattr(call.message, "business_connection_id", None)
-        chat_id = call.message.chat.id
-        msg_id = call.message.message_id
-        
+        chat_id, msg_id = call.message.chat.id, call.message.message_id
         try:
-            if bc_id: 
-                bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
-            else: 
-                bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML')
+            if bc_id: bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
+            else: bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML')
         except:
-            if bc_id: 
-                bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
-            else: 
-                bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML')
-    except: 
-        pass
+            if bc_id: bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
+            else: bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML')
+    except: pass
 
+# --- ОБРАБОТЧИК PVE (С БОТОМ) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("rps_"))
 def handle_rps_callback(call):
     bot.answer_callback_query(call.id)
@@ -294,26 +243,65 @@ def handle_rps_callback(call):
     
     names = {"rock": "Камень", "scissors": "Ножницы", "paper": "Бумага"}
     
-    if user_choice == bot_choice: 
-        result = "🤝 Ничья!"
-    elif (user_choice == "rock" and bot_choice == "scissors") or (user_choice == "scissors" and bot_choice == "paper") or (user_choice == "paper" and bot_choice == "rock"): 
-        result = "🎉 Ты победил!"
-    else: 
-        result = "💻 Я победил!"
+    if user_choice == bot_choice: result = "🤝 Ничья!"
+    elif (user_choice == "rock" and bot_choice == "scissors") or (user_choice == "scissors" and bot_choice == "paper") or (user_choice == "paper" and bot_choice == "rock"): result = "🎉 Ты победил!"
+    else: result = "💻 Я победил!"
         
     text = f"Твой выбор: {names[user_choice]}\nМой выбор: {names[bot_choice]}\n\n<b>{result}</b>"
-    
     bc_id = getattr(call.message, "business_connection_id", None)
-    chat_id = call.message.chat.id
-    msg_id = call.message.message_id
+    chat_id, msg_id = call.message.chat.id, call.message.message_id
     
     try:
-        if bc_id: 
-            bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
-        else: 
-            bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML')
-    except: 
-        pass
+        if bc_id: bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
+        else: bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML')
+    except: pass
+
+# --- ОБРАБОТЧИК PVP (ДУЭЛЬ) ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("rpspvp_"))
+def handle_rps_pvp_callback(call):
+    data = call.data.split("_")
+    choice = data[1]
+    msg_id = int(data[2])
+    
+    if msg_id not in rps_games:
+        bot.answer_callback_query(call.id, "Эта игра уже завершена.", show_alert=True)
+        return
+        
+    game = rps_games[msg_id]
+    user_id = call.from_user.id
+    
+    # Записываем выбор
+    if user_id == game["p1"]:
+        if game["c1"]: return bot.answer_callback_query(call.id, "Ты уже сделал выбор!", show_alert=True)
+        game["c1"] = choice
+        bot.answer_callback_query(call.id, "Твой выбор принят! Ждем соперника.")
+    elif user_id == game["p2"]:
+        if game["c2"]: return bot.answer_callback_query(call.id, "Ты уже сделал выбор!", show_alert=True)
+        game["c2"] = choice
+        bot.answer_callback_query(call.id, "Твой выбор принят! Ждем соперника.")
+    else:
+        return bot.answer_callback_query(call.id, "А ты тут откуда? Это не твоя игра! 😉", show_alert=True)
+        
+    # Если оба сделали выбор
+    if game["c1"] and game["c2"]:
+        c1, c2 = game["c1"], game["c2"]
+        n1, n2 = game["p1_name"], game["p2_name"]
+        names = {"rock": "Камень", "scissors": "Ножницы", "paper": "Бумага"}
+        
+        if c1 == c2: res = "🤝 Ничья!"
+        elif (c1 == "rock" and c2 == "scissors") or (c1 == "scissors" and c2 == "paper") or (c1 == "paper" and c2 == "rock"): res = f"🎉 Победил {n1}!"
+        else: res = f"🎉 Победил {n2}!"
+            
+        text = f"⚔️ <b>Дуэль завершена!</b>\n\n{n1}: {names[c1]}\n{n2}: {names[c2]}\n\n<b>{res}</b>"
+        
+        try:
+            if game["bc"]:
+                bot.edit_message_text(chat_id=game["chat_id"], message_id=msg_id, text=text, parse_mode='HTML', business_connection_id=game["bc"], reply_markup=None)
+            else:
+                bot.edit_message_text(chat_id=game["chat_id"], message_id=msg_id, text=text, parse_mode='HTML', reply_markup=None)
+        except: pass
+        
+        del rps_games[msg_id]
 
 # --- ОБЫЧНЫЙ ОБРАБОТЧИК ---
 @bot.message_handler(func=lambda m: getattr(m, "business_connection_id", None) is None, content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"])
@@ -417,9 +405,6 @@ def handle_message(message):
     if action == "say" and arg: bot.send_message(chat_key, arg); return
     if action == "choose" and arg:
         options = [o.strip() for o in arg.split(",") if o.strip()]
-        if options: bot.reply_to(message, f"🤔 Я выбираю: <b>{random.choice(options)}</b>", parse_mode='HTML')
-        else: bot.reply_to(message, "Напиши варианты через запятую: <code>.выбери чай, кофе</code>", parse_mode='HTML')
-        return
     if action == "reverse" and arg: bot.reply_to(message, f"🔄 {arg[::-1]}"); return
     if action == "upper" and arg: bot.reply_to(message, arg.upper()); return
     if action == "lower" and arg: bot.reply_to(message, arg.lower()); return
@@ -432,18 +417,14 @@ def handle_message(message):
         target = message.reply_to_message.from_user
         if target.id == message.from_user.id: bot.reply_to(message, "Себя нельзя!"); return
         action_ru = "обнять" if action == "hug" else "поцеловать"
-        
-        # БЕЗОПАСНОЕ СОЗДАНИЕ КНОПОК
         btn_yes = InlineKeyboardButton("Принять", callback_data=f"act_{action}_yes_{message.from_user.id}_{target.id}")
         btn_no = InlineKeyboardButton("Отказать", callback_data=f"act_{action}_no_{message.from_user.id}_{target.id}")
         markup = InlineKeyboardMarkup().add(btn_yes, btn_no)
-        
         bot.reply_to(message, f"❤️ <b>{message.from_user.first_name}</b> хочет {action_ru} <b>{target.first_name}</b>.\n{target.first_name}, ты согласен(на)?", parse_mode='HTML', reply_markup=markup)
         return
     if action in ("pat", "hit", "bite", "gift"):
         if not message.reply_to_message: bot.reply_to(message, "Ответь на сообщение человека."); return
-        t = message.reply_to_message.from_user.first_name
-        u = message.from_user.first_name
+        t, u = message.reply_to_message.from_user.first_name, message.from_user.first_name
         if action == "pat": bot.reply_to(message, f"🤚 <b>{u}</b> погладил(а) <b>{t}</b> по голове!")
         if action == "hit": bot.reply_to(message, f"👊 <b>{u}</b> ударил(а) <b>{t}</b>!")
         if action == "bite": bot.reply_to(message, f"🦷 <b>{u}</b> укусил(а) <b>{t}</b>!")
@@ -451,11 +432,27 @@ def handle_message(message):
         return
 
     if action == "rps":
-        btn_rock = InlineKeyboardButton("Камень", callback_data="rps_rock")
-        btn_scissors = InlineKeyboardButton("Ножницы", callback_data="rps_scissors")
-        btn_paper = InlineKeyboardButton("Бумага", callback_data="rps_paper")
-        markup = InlineKeyboardMarkup().row(btn_rock, btn_scissors, btn_paper)
-        bot.reply_to(message, "🕹 Твой ход!", reply_markup=markup)
+        if message.reply_to_message and not message.reply_to_message.from_user.is_bot:
+            # PVP ДУЭЛЬ
+            p1, p2 = message.from_user, message.reply_to_message.from_user
+            if p1.id == p2.id: bot.reply_to(message, "Себя нельзя вызвать на дуэль!"); return
+            btn_rock = InlineKeyboardButton("Камень", callback_data=f"rpspvp_rock_{message.message_id + 1000}")
+            btn_scissors = InlineKeyboardButton("Ножницы", callback_data=f"rpspvp_scissors_{message.message_id + 1000}")
+            btn_paper = InlineKeyboardButton("Бумага", callback_data=f"rpspvp_paper_{message.message_id + 1000}")
+            markup = InlineKeyboardMarkup().row(btn_rock, btn_scissors, btn_paper)
+            sent_msg = bot.reply_to(message, f"⚔️ <b>Дуэль!</b> {p1.first_name} вызывает {p2.first_name}.\nНажимайте кнопки для выбора (ваш выбор будет скрыт до конца).", parse_mode='HTML', reply_markup=markup)
+            rps_games[sent_msg.message_id] = {
+                "p1": p1.id, "p1_name": p1.first_name, "c1": None,
+                "p2": p2.id, "p2_name": p2.first_name, "c2": None,
+                "chat_id": chat_key, "bc": None
+            }
+        else:
+            # PVE С БОТОМ
+            btn_rock = InlineKeyboardButton("Камень", callback_data="rps_rock")
+            btn_scissors = InlineKeyboardButton("Ножницы", callback_data="rps_scissors")
+            btn_paper = InlineKeyboardButton("Бумага", callback_data="rps_paper")
+            markup = InlineKeyboardMarkup().row(btn_rock, btn_scissors, btn_paper)
+            bot.reply_to(message, "🕹 Твой ход!", reply_markup=markup)
         return
 
     if action == "mafia":
@@ -475,8 +472,8 @@ def handle_business(message):
     is_owner = is_business_owner(message)
 
     def send(text, reply_markup=None):
-        try: bot.send_message(chat_id=chat_id, text=text, business_connection_id=bc, parse_mode='HTML', reply_markup=reply_markup)
-        except: pass
+        try: return bot.send_message(chat_id=chat_id, text=text, business_connection_id=bc, parse_mode='HTML', reply_markup=reply_markup)
+        except: return None
 
     if mute_key in muted_business and action not in ("mute_off", "stop_spam"):
         try_delete(chat_id, message.message_id, business_connection_id=bc)
@@ -573,11 +570,9 @@ def handle_business(message):
         target = message.reply_to_message.from_user
         if target.id == message.from_user.id: send("Себя нельзя!"); return
         action_ru = "обнять" if action == "hug" else "поцеловать"
-        
         btn_yes = InlineKeyboardButton("Принять", callback_data=f"act_{action}_yes_{message.from_user.id}_{target.id}")
         btn_no = InlineKeyboardButton("Отказать", callback_data=f"act_{action}_no_{message.from_user.id}_{target.id}")
         markup = InlineKeyboardMarkup().add(btn_yes, btn_no)
-        
         send(f"❤️ <b>{message.from_user.first_name}</b> хочет {action_ru} <b>{target.first_name}</b>.\n{target.first_name}, ты согласен(на)?", reply_markup=markup)
         return
     if action in ("pat", "hit", "bite", "gift"):
@@ -589,12 +584,29 @@ def handle_business(message):
         if action == "gift": send(f"💐 <b>{u}</b> подарил(а) цветы <b>{t}</b>!")
         return
 
-    if action == "rps" and is_owner:
-        btn_rock = InlineKeyboardButton("Камень", callback_data="rps_rock")
-        btn_scissors = InlineKeyboardButton("Ножницы", callback_data="rps_scissors")
-        btn_paper = InlineKeyboardButton("Бумага", callback_data="rps_paper")
-        markup = InlineKeyboardMarkup().row(btn_rock, btn_scissors, btn_paper)
-        send("🕹 Твой ход!", reply_markup=markup)
+    if action == "rps":
+        if message.reply_to_message and not message.reply_to_message.from_user.is_bot:
+            # PVP ДУЭЛЬ В БИЗНЕСЕ
+            p1, p2 = message.from_user, message.reply_to_message.from_user
+            if p1.id == p2.id: send("Себя нельзя вызвать!"); return
+            btn_rock = InlineKeyboardButton("Камень", callback_data=f"rpspvp_rock_{message.message_id + 1000}")
+            btn_scissors = InlineKeyboardButton("Ножницы", callback_data=f"rpspvp_scissors_{message.message_id + 1000}")
+            btn_paper = InlineKeyboardButton("Бумага", callback_data=f"rpspvp_paper_{message.message_id + 1000}")
+            markup = InlineKeyboardMarkup().row(btn_rock, btn_scissors, btn_paper)
+            sent_msg = send(f"⚔️ <b>Дуэль!</b> {p1.first_name} вызывает {p2.first_name}.\nНажимайте кнопки для выбора.", reply_markup=markup)
+            if sent_msg:
+                rps_games[sent_msg.message_id] = {
+                    "p1": p1.id, "p1_name": p1.first_name, "c1": None,
+                    "p2": p2.id, "p2_name": p2.first_name, "c2": None,
+                    "chat_id": chat_id, "bc": bc
+                }
+        else:
+            if not is_owner: return
+            btn_rock = InlineKeyboardButton("Камень", callback_data="rps_rock")
+            btn_scissors = InlineKeyboardButton("Ножницы", callback_data="rps_scissors")
+            btn_paper = InlineKeyboardButton("Бумага", callback_data="rps_paper")
+            markup = InlineKeyboardMarkup().row(btn_rock, btn_scissors, btn_paper)
+            send("🕹 Твой ход!", reply_markup=markup)
         return
 
     if action == "mafia": send("Напиши мне в ЛС <code>.мафия</code>, чтобы получить роль."); return
