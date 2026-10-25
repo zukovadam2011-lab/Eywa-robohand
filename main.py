@@ -3,11 +3,17 @@ import time
 import logging
 import threading
 import random
+import json
 from flask import Flask, request
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+# ==========================================
+# ТУТ МЕНЯЕШЬ ВЕРСИЮ ПРИ ОБНОВЛЕНИИ
+CURRENT_VERSION = "1.0" 
+# ==========================================
 
 TOKEN = os.environ["BOT_TOKEN"]
 WEBHOOK_URL = os.environ["RENDER_EXTERNAL_URL"].rstrip("/")
@@ -15,12 +21,76 @@ WEBHOOK_URL = os.environ["RENDER_EXTERNAL_URL"].rstrip("/")
 bot = telebot.TeleBot(TOKEN, parse_mode=None)
 app = Flask(__name__)
 
+CHATS_FILE = "known_chats.json"
+VERSION_FILE = "version.json"
+
 # Хранилища данных
 muted_chats = set() 
 muted_business = set()
 active_spam = {}
 auto_replies = {}
+known_chats = set() # Сюда сохраняем всех, кто писал боту
 
+# --- ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ ДАННЫХ ---
+def load_data():
+    global known_chats
+    if os.path.exists(CHATS_FILE):
+        try:
+            with open(CHATS_FILE, "r") as f:
+                data = json.load(f)
+                # Преобразуем списки обратно в кортежи
+                for item in data:
+                    known_chats.add(tuple(item))
+        except Exception as e:
+            logging.error(f"Ошибка загрузки чатов: {e}")
+
+def save_chats():
+    try:
+        with open(CHATS_FILE, "w") as f:
+            json.dump(list(known_chats), f)
+    except Exception as e:
+        logging.error(f"Ошибка сохранения чатов: {e}")
+
+def broadcast_update():
+    # Ждем 5 секунд после запуска, чтобы сервер точно поднялся
+    time.sleep(5)
+    
+    last_version = ""
+    if os.path.exists(VERSION_FILE):
+        try:
+            with open(VERSION_FILE, "r") as f:
+                last_version = json.load(f).get("version", "")
+        except: pass
+
+    if last_version != CURRENT_VERSION:
+        logging.info(f"Обнаружена новая версия {CURRENT_VERSION}. Начинаем рассылку...")
+        text = (
+            f"🚀 <b>Бот Еува обновлен до версии {CURRENT_VERSION}!</b>\n\n"
+            f"Что нового:\n"
+            f"🔹 Добавлены новые фишки\n"
+            f"🔹 Исправлены ошибки\n"
+            f"🔹 И многое другое...\n\n"
+            f"Введите /start, чтобы посмотреть актуальные команды."
+        )
+        
+        for chat_id, bc_id in known_chats:
+            try:
+                if bc_id:
+                    bot.send_message(chat_id, text, business_connection_id=bc_id, parse_mode='HTML')
+                else:
+                    bot.send_message(chat_id, text, parse_mode='HTML')
+                time.sleep(0.2) # Пауза, чтобы Telegram не забанил за спам
+            except Exception as e:
+                pass # Игнорируем ошибки (например, если человек заблокировал бота)
+        
+        # Записываем новую версию
+        try:
+            with open(VERSION_FILE, "w") as f:
+                json.dump({"version": CURRENT_VERSION}, f)
+        except: pass
+        logging.info("Рассылка обновлений завершена.")
+
+# --- ОСТАЛЬНЫЕ ФУНКЦИИ ---
 def parse_command(text):
     if not text: return None, ""
     t = text.strip()
@@ -93,7 +163,7 @@ def try_delete(chat_id, message_id, business_connection_id=None):
     except: pass
 
 def delayed_auto_reply(chat_id, bc, text):
-    time.sleep(3) # Задержка 3 секунды
+    time.sleep(3) 
     try: bot.send_message(chat_id=chat_id, text=text, business_connection_id=bc, parse_mode='HTML')
     except: pass
 
@@ -109,62 +179,56 @@ def send_welcome(message):
 def callback_show_help(call):
     bot.answer_callback_query(call.id)
     help_text = (
-        "<b>🌟 ЕУВА — ТВОЙ ЛИЧНЫЙ АССИСТЕНТ</b> 🌟\n\n"
-        
+        f"<b>🌟 ЕУВА — ТВОЙ ЛИЧНЫЙ АССИСТЕНТ (v{CURRENT_VERSION})</b> 🌟\n\n"
         "<b>⚙️ КАК ПОДКЛЮЧИТЬ:</b>\n"
-        "<blockquote>Открой <b>Настройки</b> Telegram -> <b>Аккаунт</b> -> <b>Автоматизация чатов</b> -> Выбери бота <b>Еува</b>.\n"
-        "<i>(Это полностью бесплатно, Telegram Premium/Business не нужен!)</i></blockquote>\n\n"
-        
-        "<b>🛡 УПРАВЛЕНИЕ АНТИСПАМОМ:</b>\n"
-        "🔹 <code>.мут</code> / <code>/mute</code> — Включает антиспам (удаляет всё подряд).\n"
-        "🔹 <code>.размут</code> — Выключает антиспам.\n\n"
-        
-        "<b>💥 СПАМ-АТАКА (для приколов):</b>\n"
-        "🔹 <code>.с [текст]</code> — Отправить текст 100 раз.\n"
-        "🔹 <code>.ст</code> — Отправить стикер 100 раз (в ответ на стикер).\n"
-        "🔹 <code>.стоп</code> — Мгновенно остановить спам.\n\n"
-        
-        "<b>🎲 РАЗВЛЕЧЕНИЯ И ИГРЫ:</b>\n"
-        "🔹 <code>.обнять</code> / <code>.поцеловать</code> — (в ответ на сообщение) с кнопками «Принять/Отказать».\n"
-        "🔹 <code>.мафия</code> — Раздать роли в игре (напиши в ЛС бота).\n"
-        "🔹 <code>.кубик</code> / <code>.рулетка</code> — Анимированные эмодзи.\n"
-        "🔹 <code>.шар [вопрос]</code> — Магический шар (Да/Нет).\n"
-        "🔹 <code>.скажи [текст]</code> — Бот повторит твой текст.\n"
-        "🔹 <code>.пинг</code> — Проверка работы.\n"
-        "🔹 <code>.инфо</code> — (в ответ на сообщение) узнать ID человека.\n\n"
-        
-        "<b>💼 ДЛЯ АВТОМАТИЗАЦИИ ЧАТОВ:</b>\n"
-        "🔹 <code>.авто [текст]</code> — Включить умный автоответчик (бот ответит через 3 секунды, как живой человек).\n"
-        "🔹 <code>.авто стоп</code> — Выключить автоответчик."
+        "<blockquote>Настройки -> Аккаунт -> Автоматизация чатов -> Выбрать Еува.</blockquote>\n\n"
+        "<b>🛡 АНТИСПАМ:</b> <code>.мут</code> / <code>.размут</code>\n"
+        "<b>💥 СПАМ:</b> <code>.с [текст]</code>, <code>.ст</code>, <code>.стоп</code>\n"
+        "<b>🎲 ИГРЫ:</b> <code>.обнять</code>, <code>.поцеловать</code>, <code>.мафия</code>\n"
+        "<b>🕹 РАЗВЛЕЧЕНИЯ:</b> <code>.кубик</code>, <code>.рулетка</code>, <code>.шар [вопрос]</code>, <code>.скажи</code>\n"
+        "<b>💼 АВТООТВЕТЧИК:</b> <code>.авто [текст]</code> и <code>.авто стоп</code>"
     )
     try: bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=help_text, parse_mode='HTML', reply_markup=None)
     except: pass
 
-# --- ОБРАБОТЧИКИ КНОПОК ОБНИМАШЕК ---
+# --- ОБРАБОТЧИКИ КНОПОК ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("act_"))
 def handle_action_callback(call):
-    data = call.data.split("_")
-    action_type, choice, initiator_id, target_id = data[1], data[2], data[3], data[4]
+    bot.answer_callback_query(call.id)
     
-    if str(call.from_user.id) != str(target_id):
-        bot.answer_callback_query(call.id, "Эта кнопка не для тебя! 😉", show_alert=True)
-        return
+    try:
+        data = call.data.split("_")
+        action_type, choice, initiator_id, target_id = data[1], data[2], data[3], data[4]
+        
+        if str(call.from_user.id) != str(target_id):
+            bot.answer_callback_query(call.id, "Эта кнопка не для тебя! 😉", show_alert=True)
+            return
 
-    try: initiator = bot.get_chat(int(initiator_id)).first_name
-    except: initiator = "Кто-то"
-    target = call.from_user.first_name
-    
-    if choice == "yes":
-        if action_type == "hug": text = f"🤗 <b>{target}</b> с радостью обнял(а) <b>{initiator}</b>!"
-        else: text = f"😘 <b>{target}</b> поцеловал(а) <b>{initiator}</b>! Какая милота!"
-        bot.answer_callback_query(call.id, "Принято!")
-    else:
-        if action_type == "hug": text = f"💔 <b>{target}</b> уклонился(ась) от объятий <b>{initiator}</b>..."
-        else: text = f"🚫 <b>{target}</b> дал(а) пощёчину <b>{initiator}</b> за попытку поцелуя!"
-        bot.answer_callback_query(call.id, "Отклонено!")
+        try: initiator = bot.get_chat(int(initiator_id)).first_name
+        except: initiator = "Кто-то"
+        target = call.from_user.first_name
+        
+        if choice == "yes":
+            if action_type == "hug": text = f"🤗 <b>{target}</b> с радостью обнял(а) <b>{initiator}</b>!"
+            else: text = f"😘 <b>{target}</b> поцеловал(а) <b>{initiator}</b>! Какая милота!"
+        else:
+            if action_type == "hug": text = f"💔 <b>{target}</b> уклонился(ась) от объятий <b>{initiator}</b>..."
+            else: text = f"🚫 <b>{target}</b> дал(а) пощёчину <b>{initiator}</b> за попытку поцелуя!"
 
-    try: bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=text, parse_mode='HTML')
-    except: pass
+        bc_id = getattr(call.message, "business_connection_id", None)
+        chat_id = call.message.chat.id
+        msg_id = call.message.message_id
+
+        try:
+            if bc_id:
+                bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
+            else:
+                bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML')
+        except Exception as e:
+            if bc_id: bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML', business_connection_id=bc_id)
+            else: bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML')
+    except Exception as e:
+        logging.error(f"Ошибка в обработчике кнопки: {e}")
 
 # --- ОБЫЧНЫЙ ОБРАБОТЧИК ---
 @bot.message_handler(func=lambda m: getattr(m, "business_connection_id", None) is None, content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"])
@@ -172,6 +236,11 @@ def handle_message(message):
     if getattr(message, "business_connection_id", None) is not None: return
     if not message.from_user or message.from_user.is_bot: return
     if message.text and message.text.startswith('/start'): return
+
+    # Сохраняем чат для рассылки
+    if (message.chat.id, None) not in known_chats:
+        known_chats.add((message.chat.id, None))
+        save_chats()
 
     action, arg = parse_command(message.text)
     is_private = message.chat.type == "private"
@@ -240,14 +309,19 @@ def handle_message(message):
         else: bot.reply_to(message, "Игра «Мафия»! Напиши мне в личные сообщения команду <code>.мафия</code>, чтобы получить свою роль в тайне от других.", parse_mode='HTML')
         return
 
-# --- БИЗНЕС ОБРАБОТЧИК (Автоматизация) ---
+# --- БИЗНЕС ОБРАБОТЧИК ---
 @bot.business_message_handler(func=lambda m: getattr(m, "business_connection_id", None) is not None, content_types=["text", "sticker", "photo", "video", "document", "voice", "audio"])
 def handle_business(message):
     if not message.from_user or message.from_user.is_bot: return
 
-    action, arg = parse_command(message.text)
+    # Сохраняем бизнес-чат для рассылки
     bc = message.business_connection_id
     chat_id = message.chat.id
+    if (chat_id, bc) not in known_chats:
+        known_chats.add((chat_id, bc))
+        save_chats()
+
+    action, arg = parse_command(message.text)
     mute_key = (bc, chat_id)
     is_muted = mute_key in muted_business
     is_owner = is_business_owner(message)
@@ -260,7 +334,6 @@ def handle_business(message):
         try_delete(chat_id, message.message_id, business_connection_id=bc)
         return
 
-    # АВТООТВЕТЧИК
     if chat_id in auto_replies and not is_owner:
         threading.Thread(target=delayed_auto_reply, args=(chat_id, bc, auto_replies[chat_id]), daemon=True).start()
         return
@@ -343,10 +416,15 @@ def webhook_handler():
 def health(): return "ok", 200
 
 if __name__ == "__main__":
+    load_data() # Загружаем базу чатов перед запуском
     bot.remove_webhook()
     time.sleep(1)
     bot.set_webhook(
         url=f"{WEBHOOK_URL}/{TOKEN}",
         allowed_updates=["message", "edited_message", "callback_query", "business_connection", "business_message", "edited_business_message"],
     )
+    
+    # Запускаем рассылку в фоне, чтобы не тормозить сервер
+    threading.Thread(target=broadcast_update, daemon=True).start()
+    
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
