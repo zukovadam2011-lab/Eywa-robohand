@@ -442,21 +442,13 @@ def handle_business(message):
         return
 
     if action == "mute_on":
+    if not is_owner: send("Только владелец может включать антиспам"); return
+    muted_business.add(mute_key); send("Антиспам включён ✅"); return
     
-# Автоответчик срабатывает только на обычные сообщения от собеседника
-    if not action and chat_id in auto_replies and not is_owner:
-        threading.Thread(target=delayed_auto_reply, args=(chat_id, bc, auto_replies[chat_id]), daemon=True).start()
-        return
-# Конец блока с отступами
-
-if action == "mute_on":
+if action == "mute_off":
+    if not is_owner: send("Только владелец может выключать антиспам"); return
+    muted_business.discard(mute_key); send("Антиспам выключен"); return
     
-    if action == "mute_on":
-        if not is_owner: send("Только владелец может включать антиспам"); return
-        muted_business.add(mute_key); send("Антиспам включён ✅"); return
-    if action == "mute_off":
-        if not is_owner: send("Только владелец может выключать антиспам"); return
-        muted_business.discard(mute_key); send("Антиспам выключен"); return
     if action == "stop_spam":
         if mute_key in active_spam: active_spam[mute_key].set(); send("Спам остановлен 🛑")
         else: send("Спам и так не запущен")
