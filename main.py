@@ -444,9 +444,9 @@ def handle_business(message):
     if action == "mute_on":
     
 # Автоответчик срабатывает только на обычные сообщения от собеседника
-if not action and chat_id in auto_replies and not is_owner:
-    threading.Thread(target=delayed_auto_reply, args=(chat_id, bc, auto_replies[chat_id]), daemon=True).start()
-    return
+    if not action and chat_id in auto_replies and not is_owner:
+        threading.Thread(target=delayed_auto_reply, args=(chat_id, bc, auto_replies[chat_id]), daemon=True).start()
+        return
 # Конец блока с отступами
 
 if action == "mute_on":
